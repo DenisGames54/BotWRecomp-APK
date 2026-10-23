@@ -8,17 +8,17 @@ import java.io.File
 import java.security.MessageDigest
 
 object Storage {
-    /** SHA-256 do U-King.rpx USA v208 (update 1.6.0), conforme o README do projeto. */
+    /** SHA-256 of the USA v208 (update 1.6.0) U-King.rpx, as given in the engine README. */
     const val RPX_SHA256 = "ba58da5b95ce929e005d058ceb08b9b2788d1ab2bbc8a6c189bbadca0bb34d30"
 
-    /** Saves/cache/log/settings ficam fora do app: sobrevivem a desinstalar e dá para copiar do Debian. */
+    /** Saves/cache/log/settings live outside the app: they survive an uninstall and can be copied from Debian. */
     val userRoot: File get() = File(Environment.getExternalStorageDirectory(), "BotWRecomp/user")
 
     fun hasAllFilesAccess() = Environment.isExternalStorageManager()
 
     /** content://...tree/primary:Download/game  ->  /storage/emulated/0/Download/game */
     fun treeUriToPath(uri: Uri): String? {
-        val id = DocumentsContract.getTreeDocumentId(uri) // "primary:Download/game" ou "ABCD-1234:Games/botw"
+        val id = DocumentsContract.getTreeDocumentId(uri) // "primary:Download/game" or "ABCD-1234:Games/botw"
         val vol = id.substringBefore(':')
         val rel = id.substringAfter(':', "")
         val base = if (vol == "primary") Environment.getExternalStorageDirectory().path else "/storage/$vol"

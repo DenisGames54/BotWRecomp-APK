@@ -1,0 +1,64 @@
+From 9ed987b2f7c66a12488f49df80437cdea58d2687 Mon Sep 17 00:00:00 2001
+From: DenisGames54 <94488969+DenisGames54@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 21:56:28 +0000
+Subject: [PATCH] android: no X11/Wayland surface code, request
+ VK_KHR_android_surface
+
+---
+ runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h       | 2 +-
+ .../cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.cpp    | 5 ++++-
+ runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.h  | 2 +-
+ 3 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h
+index f503c10..b38ff0e 100644
+--- a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h
++++ b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h
+@@ -130,7 +130,7 @@ VKFUNC_DEVICE(vkDestroyPipeline);
+ VKFUNC_DEVICE(vkCmdBindPipeline);
+ 
+ // swapchain
+-#if BOOST_OS_LINUX || BOOST_OS_BSD
++#if (BOOST_OS_LINUX || BOOST_OS_BSD) && !defined(__ANDROID__)
+ VKFUNC_INSTANCE(vkCreateXlibSurfaceKHR);
+ VKFUNC_INSTANCE(vkCreateXcbSurfaceKHR);
+ #ifdef HAS_WAYLAND
+diff --git a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.cpp b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.cpp
+index 2616c2c..effd16b 100644
+--- a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.cpp
++++ b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.cpp
+@@ -113,6 +113,9 @@ std::vector<VulkanRenderer::DeviceInfo> VulkanRenderer::GetDevices()
+ 	requiredExtensions.emplace_back(VK_KHR_SURFACE_EXTENSION_NAME);
+ 	#if BOOST_OS_WINDOWS
+ 	requiredExtensions.emplace_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
++	#elif defined(__ANDROID__)
++	// Android: the surface comes from SDL_Vulkan_CreateSurface (CreateFramebufferSurface)
++	requiredExtensions.emplace_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+ 	#elif BOOST_OS_LINUX || BOOST_OS_BSD
+ 	auto backend = WindowSystem::GetWindowInfo().window_main.backend;
+ 	if(backend == WindowSystem::WindowHandleInfo::Backend::X11)
+@@ -1573,7 +1576,7 @@ VkSurfaceKHR VulkanRenderer::CreateWinSurface(VkInstance instance, HWND hwindow)
+ }
+ #endif
+ 
+-#if BOOST_OS_LINUX || BOOST_OS_BSD
++#if (BOOST_OS_LINUX || BOOST_OS_BSD) && !defined(__ANDROID__)
+ VkSurfaceKHR VulkanRenderer::CreateXlibSurface(VkInstance instance, Display* dpy, Window window)
+ {
+     VkXlibSurfaceCreateInfoKHR sci{};
+diff --git a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.h b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.h
+index d975e11..68fe934 100644
+--- a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.h
++++ b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.h
+@@ -212,7 +212,7 @@ public:
+ #if BOOST_OS_WINDOWS
+ 	static VkSurfaceKHR CreateWinSurface(VkInstance instance, HWND hwindow);
+ #endif
+-#if BOOST_OS_LINUX || BOOST_OS_BSD
++#if (BOOST_OS_LINUX || BOOST_OS_BSD) && !defined(__ANDROID__)
+ 	static VkSurfaceKHR CreateXlibSurface(VkInstance instance, Display* dpy, Window window);
+     static VkSurfaceKHR CreateXcbSurface(VkInstance instance, xcb_connection_t* connection, xcb_window_t window);
+ 	#ifdef HAS_WAYLAND
+-- 
+2.43.0
+

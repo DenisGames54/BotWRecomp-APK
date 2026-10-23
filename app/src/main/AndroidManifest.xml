@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- O jogo e lido direto da pasta escolhida (sem copia): precisa de "Acesso a todos os arquivos" -->
+    <!-- The game is read straight from the chosen folder (no copy): needs "All files access" -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
@@ -22,7 +22,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Fase 2: vira subclasse de org.libsdl.app.SDLActivity (libmain.so) -->
+        <!-- Native game: SDLActivity subclass running libmain.so in its own process -->
         <activity
             android:name=".GameActivity"
             android:exported="false"

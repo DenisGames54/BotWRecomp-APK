@@ -4,20 +4,20 @@ import java.io.File
 import java.util.Locale
 
 /**
- * Espelha EXATAMENTE as chaves de runtime/src/settings.cpp (settings.ini).
- * Se o runtime ganhar/perder uma chave, atualize aqui e em Options.
+ * Mirrors EXACTLY the keys of runtime/src/settings.cpp (settings.ini).
+ * If the runtime gains or loses a key, update it here and in the UI cards.
  */
 data class BotwSettings(
-    val fps: Int = 30,            // 30 ou 60
-    val scale: Float = 1f,        // 0 = auto (encaixa na tela); 0.5 .. 3
+    val fps: Int = 60,            // 30 or 60
+    val scale: Float = 1f,        // 0 = auto (fit the display); 0.5 .. 3
     val display: Int = 0,         // 0 fit, 1 stretch, 2 fill
     val filter: Int = 1,          // 0 bilinear, 1 bicubic, 2 hermite, 3 nearest
     val gyro: Boolean = true,
     val rumble: Boolean = true,
-    val layout: Int = 0,          // 0 A a direita (Nintendo), 1 A embaixo
+    val layout: Int = 0,          // 0 A on the right (Nintendo), 1 A at the bottom
     val showFps: Boolean = false,
     val volume: Int = 100,        // 0..100
-    val touch: Int = 1,           // 0 auto, 1 ligado, 2 desligado
+    val touch: Int = 1,           // 0 auto, 1 on, 2 off
     val touchHidden: Boolean = false,
 ) {
     fun toIni(): String {
@@ -33,7 +33,7 @@ data class BotwSettings(
     }
 
     companion object {
-        /** Le o settings.ini (o jogo grava la quando voce muda algo no F1/menu). Ausente = defaults. */
+        /** Reads settings.ini (the game writes it when you change something in its menu). Missing file = defaults. */
         fun load(file: File): BotwSettings {
             var s = BotwSettings()
             if (!file.isFile) return s

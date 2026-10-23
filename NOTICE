@@ -1,4 +1,5 @@
 BotWRecomp-APK
-Projeto nao oficial. Runtime/recompilador: Ishaan Kalra (IshaanKalra2103/BotWRecomp).
-Fork Android/Vulkan: DenisGames54/BotWRecomp-Android. Camada GPU (Latte/Vulkan) e decoder H.264: Cemu (MPL-2.0).
-Este repositorio nao contem o jogo nem arquivos protegidos.
+Unofficial project. Runtime/recompiler: Ishaan Kalra (IshaanKalra2103/BotWRecomp).
+Android/Vulkan fork: DenisGames54/BotWRecomp-Android. GPU layer (Latte/Vulkan) and H.264 decoder: Cemu (MPL-2.0).
+Built with SDL3 (zlib), fmt (MIT), zstd (BSD), glslang (BSD/Apache-2.0), Boost (BSL-1.0), GLM (MIT).
+This repository does not contain the game or any protected files.

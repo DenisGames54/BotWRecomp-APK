@@ -1,38 +1,61 @@
 # BotWRecomp-APK
 
-Launcher + empacotamento Android do [BotWRecomp-Android](https://github.com/DenisGames54/BotWRecomp-Android)
-(fork Android/Vulkan do [BotWRecomp](https://github.com/IshaanKalra2103/BotWRecomp)).
+Android launcher and packaging for [BotWRecomp-Android](https://github.com/DenisGames54/BotWRecomp-Android)
+(the Android/Vulkan fork of [BotWRecomp](https://github.com/IshaanKalra2103/BotWRecomp)).
 
 > [!IMPORTANT]
-> **Este projeto NAO fornece o jogo nem nenhum tipo de arquivo protegido** (ROMs, chaves, dumps, codigo do jogo,
-> nem binarios derivados dele). E apenas uma ferramenta. Voce precisa do seu proprio dump legal do
-> *The Legend of Zelda: Breath of the Wild* (Wii U, USA, update 1.6.0 / v208), feito do seu console.
-> O APK e **gerado na sua maquina a partir do seu dump** e **nao pode ser distribuido**.
-> Nao peca arquivos do jogo em issues ou discussoes.
+> **This project does NOT provide the game or any kind of protected file** (ROMs, keys, dumps, game code,
+> or binaries derived from it). It is only a tool. You need your own legally obtained dump of
+> *The Legend of Zelda: Breath of the Wild* (Wii U, USA, update 1.6.0 / v208), made from your own console.
+> The APK is **generated on your own machine from your own dump** and **must not be distributed**.
+> Do not ask for game files in issues or discussions.
 
 > [!WARNING]
-> Estagio inicial. Hoje so o launcher existe (fase 1); o motor nativo ainda nao esta ligado ao APK.
+> Early stage. The launcher works; the native engine build (phase 2) is new and untested on device.
 
-## O que o launcher faz
-- Escolhe a pasta do jogo (`code/ content/ meta/`) **sem copiar nada**: le direto da memoria interna
-  (requer "Acesso a todos os arquivos").
-- Verifica o SHA-256 do `U-King.rpx` (v208 USA).
-- Edita as opcoes reais do runtime, gravando o mesmo `settings.ini` que o menu do jogo usa:
-  fps, resolucao, tela, filtro, touch, botoes, FPS na tela, giroscopio, vibracao, volume.
-- Dados do usuario (saves, cache, log, settings) ficam em `/storage/emulated/0/BotWRecomp/user`.
+## What the launcher does
+- Picks the game folder (`code/ content/ meta/`) **without copying anything**: the game is read straight from
+  internal storage (needs "All files access").
+- Verifies the SHA-256 of `U-King.rpx` (USA v208).
+- Edits the runtime's real options by writing the same `settings.ini` the in-game menu uses:
+  frame rate, resolution, display mode, upscale filter, touch controls, button layout, FPS counter, gyro,
+  rumble, volume. It reloads the file when you come back, so changes made in-game show up here.
+- User data (saves, cache, log, settings) lives in `/storage/emulated/0/BotWRecomp/user`.
 
-## Build (WSL2, Windows)
+## Repository layout
+```
+engine/    submodule: BotWRecomp-Android (runtime, Cemu GPU layer, recompiler)
+app/       Kotlin + Compose launcher, GameActivity (SDL3)
+native/    NDK CMake build of libmain.so, Android entry point, compat headers
+scripts/   setup_wsl.sh, fetch_deps.sh, recompile_dump.sh, build_native.sh, build_apk.sh
+patches/   small guarded changes the engine needs for Android (see below)
+```
+
+## Build (WSL2 on Windows, x86-64)
 ```bash
 git clone --recurse-submodules https://github.com/DenisGames54/BotWRecomp-APK
 cd BotWRecomp-APK
-scripts/setup_wsl.sh        # uma vez: JDK, SDK, NDK, Gradle
-scripts/build_apk.sh        # gera app/build/outputs/apk/debug/app-debug.apk
+scripts/setup_wsl.sh                 # once: JDK 17, Android SDK, NDK 27, Gradle
+source .botw-apk-env
+scripts/build_apk.sh /path/to/U-King.rpx
+# -> app/build/outputs/apk/debug/app-debug.apk
+```
+`U-King.rpx` is the only game file the build needs (the game folder itself is read on the phone at runtime).
+The recompiled code goes to `work/generated/` and the APK that contains it stays on your own devices.
+
+Engine patch: `patches/0001-engine-android-vulkan-surface.patch` removes the X11/Wayland surface code from
+the Vulkan renderer on Android. Apply it once to the engine fork (it is guarded by `__ANDROID__`, so Linux
+builds are unaffected):
+```bash
+cd engine && git apply ../patches/0001-engine-android-vulkan-surface.patch
+git commit -am "android: Vulkan surface via SDL" && git push origin android-vulkan
+cd .. && git add engine && git commit -m "Update engine"
 ```
 
 ## Roadmap
-1. Launcher (esta fase).
-2. Build NDK do runtime (`libmain.so`) + `GameActivity` (SDL3) + touch.
-3. Script que recompila o *seu* dump e gera o APK pessoal.
-4. Importar drivers Turnip customizados (testes de desempenho).
+1. Launcher (done).
+2. NDK build of the runtime + `GameActivity` (SDL3) + touch controls (in progress).
+3. Personal-APK build script (`scripts/build_apk.sh`).
+4. Import custom Turnip drivers (performance testing).
 
-Veja `NOTICE` para creditos.
+See `NOTICE` for credits.

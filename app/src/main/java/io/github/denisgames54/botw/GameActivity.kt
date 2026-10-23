@@ -1,21 +1,17 @@
 package io.github.denisgames54.botw
 
-import android.app.Activity
-import android.os.Bundle
-import android.widget.TextView
+import org.libsdl.app.SDLActivity
 
 /**
- * PLACEHOLDER (fase 1). Na fase 2 vira `class GameActivity : SDLActivity()` carregando libmain.so
- * (runtime + cemu_gpu + guest) e recebendo BOTW_GAME / BOTW_USER_ROOT como variaveis de ambiente.
+ * Hosts the native runtime (libmain.so) through SDL3's SDLActivity. SDL creates the Vulkan window and
+ * forwards touch / gamepad events; the launcher passes the game folder and the user folder as arguments,
+ * which native/src/android_main.cpp turns into --game / BOTW_USER_ROOT.
  */
-class GameActivity : Activity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val game = intent.getStringExtra("BOTW_GAME")
-        val user = intent.getStringExtra("BOTW_USER_ROOT")
-        setContentView(TextView(this).apply {
-            setPadding(48, 48, 48, 48)
-            text = "Motor nativo ainda nao ligado (fase 2).\n\nBOTW_GAME=$game\nBOTW_USER_ROOT=$user"
-        })
-    }
+class GameActivity : SDLActivity() {
+    override fun getLibraries(): Array<String> = arrayOf("SDL3", "main")
+
+    override fun getArguments(): Array<String> = arrayOf(
+        "--game", intent.getStringExtra("BOTW_GAME") ?: "",
+        "--user-root", intent.getStringExtra("BOTW_USER_ROOT") ?: ""
+    )
 }

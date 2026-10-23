@@ -57,13 +57,13 @@ private fun Launcher() {
     var showLegal by remember { mutableStateOf(!Storage.legalAccepted(ctx)) }
     val iniFile = remember { File(Storage.userRoot, "settings.ini") }
 
-    // Atualiza ao voltar do ajuste de permissao
+    // Refresh when coming back from the permission screen
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
         val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
             if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 hasAccess = Storage.hasAllFilesAccess()
-                // O jogo grava o settings.ini quando voce muda algo no menu F1: recarrega.
+                // The game writes settings.ini when you change something in its menu: reload it.
                 if (hasAccess) settings = BotwSettings.load(iniFile)
             }
         }
@@ -74,9 +74,9 @@ private fun Launcher() {
         val g = game
         rpxStatus = null
         if (g != null && hasAccess && Storage.looksValid(g)) {
-            rpxStatus = "verificando..."
+            rpxStatus = "verifying..."
             rpxStatus = withContext(Dispatchers.IO) {
-                if (Storage.sha256(Storage.rpx(g)) == Storage.RPX_SHA256) "ok" else "outra versao"
+                if (Storage.sha256(Storage.rpx(g)) == Storage.RPX_SHA256) "ok" else "other version"
             }
         }
     }
@@ -97,7 +97,7 @@ private fun Launcher() {
 
     Box(Modifier.fillMaxSize().background(Bg).safeDrawingPadding().padding(16.dp)) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            // ---- esquerda: identidade + pasta + jogar
+            // ---- left: identity + folder + play
             Column(
                 Modifier.weight(0.38f).fillMaxHeight(),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -107,7 +107,7 @@ private fun Launcher() {
                 Text("BREATH OF THE WILD", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
                 Text("Recompiled · Android", color = Accent, fontSize = 13.sp, letterSpacing = 2.sp)
                 Spacer(Modifier.height(18.dp))
-                PillButton("ESCOLHER PASTA", Modifier.fillMaxWidth()) {
+                PillButton("CHOOSE FOLDER", Modifier.fillMaxWidth()) {
                     if (!hasAccess) {
                         ctx.startActivity(
                             Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}"))
@@ -117,21 +117,21 @@ private fun Launcher() {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     when {
-                        !hasAccess -> "Toque para conceder \"Acesso a todos os arquivos\" (o jogo e lido direto da pasta, sem copia)."
-                        game == null -> "Escolha a pasta que contem code/, content/ e meta/ do seu dump."
-                        !Storage.looksValid(game!!) -> "Pasta invalida: faltam code/U-King.rpx, content/ ou meta/.\n$game"
+                        !hasAccess -> "Tap to grant \"All files access\" (the game is read straight from the folder, nothing is copied)."
+                        game == null -> "Choose the folder that contains code/, content/ and meta/ from your own dump."
+                        !Storage.looksValid(game!!) -> "Invalid folder: code/U-King.rpx, content/ or meta/ is missing.\n$game"
                         else -> game!!
                     },
                     color = if (hasAccess && game != null && !valid) Color(0xFFFFB86B) else Muted,
                     fontSize = 11.sp
                 )
                 when (rpxStatus) {
-                    "ok" -> Text("✔ U-King.rpx v208 (USA 1.6.0) verificado", color = Accent, fontSize = 11.sp)
-                    "outra versao" -> Text("⚠ U-King.rpx diferente da v208: so a v208 USA e suportada", color = Color(0xFFFFB86B), fontSize = 11.sp)
-                    "verificando..." -> Text("verificando U-King.rpx...", color = Muted, fontSize = 11.sp)
+                    "ok" -> Text("✔ U-King.rpx v208 (USA 1.6.0) verified", color = Accent, fontSize = 11.sp)
+                    "other version" -> Text("⚠ U-King.rpx is not v208: only USA v208 is supported", color = Color(0xFFFFB86B), fontSize = 11.sp)
+                    "verifying..." -> Text("verifying U-King.rpx...", color = Muted, fontSize = 11.sp)
                 }
                 Spacer(Modifier.height(14.dp))
-                PillButton("JOGAR", Modifier.fillMaxWidth(), enabled = valid && rpxStatus == "ok") {
+                PillButton("PLAY", Modifier.fillMaxWidth(), enabled = valid && rpxStatus == "ok") {
                     update(settings)
                     ctx.startActivity(Intent(ctx, GameActivity::class.java).apply {
                         putExtra("BOTW_GAME", game)
@@ -139,16 +139,16 @@ private fun Launcher() {
                     })
                 }
                 Spacer(Modifier.height(10.dp))
-                Text("Sobre / aviso legal", color = Muted, fontSize = 11.sp,
+                Text("About / legal notice", color = Muted, fontSize = 11.sp,
                     modifier = Modifier.clickable { showLegal = true })
             }
 
-            // ---- direita: opcoes (1:1 com o settings.ini do runtime)
+            // ---- right: options (1:1 with the runtime settings.ini)
             Column(Modifier.weight(0.62f).fillMaxHeight().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SettingsCards(settings, ::update)
-                Text("Toque numa opcao: ela e salva em settings.ini e vale no proximo inicio. " +
-                        "A resolucao so muda ao reiniciar o jogo. Dentro do jogo, o botao de menu abre as mesmas opcoes.",
+                Text("Tap an option: it is saved to settings.ini and applies on the next start. " +
+                        "Resolution only changes after restarting the game. In game, the menu button opens the same options.",
                     color = Muted, fontSize = 11.sp)
             }
         }
@@ -159,35 +159,35 @@ private fun Launcher() {
 
 @Composable
 private fun SettingsCards(s: BotwSettings, set: (BotwSettings) -> Unit) {
-    SCard("Resolucao de renderizacao") {
+    SCard("Render resolution") {
         Segmented(
             listOf("Auto" to 0f, "360p" to 0.5f, "540p" to 0.75f, "720p" to 1f,
                 "1080p" to 1.5f, "1440p" to 2f, "1800p" to 2.5f, "2160p" to 3f),
             s.scale, { set(s.copy(scale = it)) }, near = { a, b -> kotlin.math.abs(a - b) < 0.01f })
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        SCard("Taxa de quadros", Modifier.weight(1f)) {
+        SCard("Frame rate", Modifier.weight(1f)) {
             Segmented(listOf("30 (original)" to 30, "60" to 60), s.fps, { set(s.copy(fps = it)) })
         }
-        SCard("Tela", Modifier.weight(1f)) {
-            Segmented(listOf("16:9" to 0, "Esticar" to 1, "Preencher" to 2), s.display, { set(s.copy(display = it)) })
+        SCard("Display", Modifier.weight(1f)) {
+            Segmented(listOf("16:9" to 0, "Stretch" to 1, "Fill" to 2), s.display, { set(s.copy(display = it)) })
         }
     }
-    SCard("Filtro de upscale") {
+    SCard("Upscale filter") {
         Segmented(listOf("Bilinear" to 0, "Bicubic" to 1, "Hermite" to 2, "Nearest" to 3), s.filter, { set(s.copy(filter = it)) })
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        SCard("Controles touch", Modifier.weight(1f)) {
-            Segmented(listOf("Auto" to 0, "Ligado" to 1, "Desligado" to 2), s.touch, { set(s.copy(touch = it)) })
+        SCard("Touch controls", Modifier.weight(1f)) {
+            Segmented(listOf("Auto" to 0, "On" to 1, "Off" to 2), s.touch, { set(s.copy(touch = it)) })
         }
-        SCard("Botoes", Modifier.weight(1f)) {
-            Segmented(listOf("A a direita" to 0, "A embaixo" to 1), s.layout, { set(s.copy(layout = it)) })
+        SCard("Buttons", Modifier.weight(1f)) {
+            Segmented(listOf("A on the right" to 0, "A at the bottom" to 1), s.layout, { set(s.copy(layout = it)) })
         }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ToggleCard("Contador de FPS", "mostra o FPS no jogo", s.showFps, { set(s.copy(showFps = it)) }, Modifier.weight(1f))
-        ToggleCard("Giroscopio", "mira com o gyro do controle", s.gyro, { set(s.copy(gyro = it)) }, Modifier.weight(1f))
-        ToggleCard("Vibracao", "rumble", s.rumble, { set(s.copy(rumble = it)) }, Modifier.weight(1f))
+        ToggleCard("FPS counter", "shows FPS in game", s.showFps, { set(s.copy(showFps = it)) }, Modifier.weight(1f))
+        ToggleCard("Gyro aiming", "controller gyro aims", s.gyro, { set(s.copy(gyro = it)) }, Modifier.weight(1f))
+        ToggleCard("Rumble", "controller vibration", s.rumble, { set(s.copy(rumble = it)) }, Modifier.weight(1f))
     }
     SCard("Volume: ${s.volume}%") {
         Slider(value = s.volume.toFloat(), onValueChange = { set(s.copy(volume = it.toInt())) }, valueRange = 0f..100f)
@@ -256,14 +256,14 @@ private fun PillButton(text: String, modifier: Modifier = Modifier, enabled: Boo
 private fun LegalDialog(onAccept: () -> Unit) {
     AlertDialog(
         onDismissRequest = {},
-        confirmButton = { TextButton(onClick = onAccept) { Text("Entendi") } },
-        title = { Text("Aviso legal") },
+        confirmButton = { TextButton(onClick = onAccept) { Text("Got it") } },
+        title = { Text("Legal notice") },
         text = {
             Text(
-                "Este projeto NAO fornece o jogo nem nenhum arquivo protegido (ROMs, chaves, dumps ou codigo do jogo). " +
-                        "E apenas uma ferramenta. Voce precisa do seu proprio dump legal do Wii U (USA, update 1.6.0 / v208). " +
-                        "O APK e gerado na sua maquina a partir do seu dump e nao pode ser distribuido.\n\n" +
-                        "Projeto nao oficial. Recompilador e runtime por Ishaan Kalra; renderer Vulkan e decoder H.264 vem do Cemu."
+                "This project does NOT provide the game or any protected files (ROMs, keys, dumps or game code). " +
+                        "It is only a tool. You need your own legally obtained Wii U dump (USA, update 1.6.0 / v208). " +
+                        "The APK is generated on your own machine from your own dump and must not be distributed.\n\n" +
+                        "Unofficial project. Recompiler and runtime by Ishaan Kalra; the Vulkan renderer and H.264 decoder come from Cemu."
             )
         }
     )
