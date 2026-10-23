@@ -1,0 +1,4 @@
+[submodule "engine"]
+	path = engine
+	url = https://github.com/DenisGames54/BotWRecomp-Android.git
+	branch = android-vulkan
