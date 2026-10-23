@@ -1,0 +1,23 @@
+# NUNCA versionar nada derivado do jogo
+generated/
+game/
+*.rpx
+*.wud
+*.wux
+*.wua
+*.rpl
+*.so
+*.a
+*.o
+*.apk
+*.aab
+# build / ambiente
+build/
+.gradle/
+.cxx/
+.idea/
+local.properties
+*.keystore
+*.jks
+*.log
+.botw-apk-env
