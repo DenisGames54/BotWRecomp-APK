@@ -101,6 +101,7 @@ target_compile_definitions(cemu_gpu PRIVATE BOOST_NOWIDE_NO_LIB ENABLE_VULKAN=1 
   EMULATOR_VERSION_MAJOR=2 EMULATOR_VERSION_MINOR=6 EMULATOR_VERSION_PATCH=0 EMULATOR_HASH=a53cf0e)
 target_compile_options(cemu_gpu PRIVATE -w -O2 -flax-vector-conversions -mcpu=${BOTW_CPU}
   "SHELL:-include vk_platform_compat.h" "SHELL:-include Common/precompiled.h")
+target_include_directories(cemu_gpu PRIVATE ${BOTW_DEPS}/zstd-1.5.7/lib)
 target_link_libraries(cemu_gpu PRIVATE SDL3::SDL3 fmt::fmt)
 
 # ---------------------------------------------------------------- runtime
@@ -110,6 +111,7 @@ list(APPEND RUNTIME_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/android_main.cpp)
 set_source_files_properties(${ROOT}/runtime/src/main.cpp PROPERTIES COMPILE_DEFINITIONS "main=botw_main")
 
 add_subdirectory(${ROOT}/runtime/third_party/ih264d ${CMAKE_BINARY_DIR}/ih264d EXCLUDE_FROM_ALL)
+target_include_directories(ih264d PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat)
 add_library(runtime_obj OBJECT ${RUNTIME_SOURCES})
 target_include_directories(runtime_obj PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat ${ROOT}/linux/compat
   ${ROOT}/runtime/include ${ROOT}/runtime/src ${BOTW_GENERATED}
@@ -131,3 +133,5 @@ add_custom_command(TARGET main POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory ${BOTW_JNILIBS}
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:main> ${BOTW_JNILIBS}/libmain.so
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:SDL3::SDL3> ${BOTW_JNILIBS}/libSDL3.so)
+target_link_options(main PRIVATE -Wl,--strip-all)
+target_link_options(main PRIVATE -Wl,--gc-sections -Wl,--icf=all -Wl,--build-id=none)

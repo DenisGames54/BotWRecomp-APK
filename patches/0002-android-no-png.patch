@@ -1,0 +1,13 @@
+diff --git a/runtime/cemu/Cafe/HW/Latte/Renderer/Renderer.cpp b/runtime/cemu/Cafe/HW/Latte/Renderer/Renderer.cpp
+index 35991cd..de2ccd4 100644
+--- a/runtime/cemu/Cafe/HW/Latte/Renderer/Renderer.cpp
++++ b/runtime/cemu/Cafe/HW/Latte/Renderer/Renderer.cpp
+@@ -6,7 +6,7 @@
+ 
+ #include <imgui.h>
+ #include "imgui/imgui_extension.h"
+-#include <png.h>
++// #include <png.h> // android: removido
+ 
+ #include "config/ActiveSettings.h"
+ 

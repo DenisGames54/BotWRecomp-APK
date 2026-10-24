@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."
 source .botw-apk-env
 if [ "${1:-}" != "--launcher-only" ]; then
   scripts/fetch_deps.sh
+  scripts/apply_patches.sh
   if [ ! -d work/generated ]; then scripts/recompile_dump.sh "${1:?first run needs the path to your U-King.rpx}"; fi
   scripts/build_native.sh
 fi
