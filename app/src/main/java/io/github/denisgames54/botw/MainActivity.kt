@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -54,6 +55,8 @@ private fun Launcher() {
     var settings by remember { mutableStateOf(BotwSettings()) }
     var hasAccess by remember { mutableStateOf(Storage.hasAllFilesAccess()) }
     var rpxStatus by remember { mutableStateOf<String?>(null) }
+    var crashLog by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     var showLegal by remember { mutableStateOf(!Storage.legalAccepted(ctx)) }
     val iniFile = remember { File(Storage.userRoot, "settings.ini") }
 
@@ -65,6 +68,14 @@ private fun Launcher() {
                 hasAccess = Storage.hasAllFilesAccess()
                 // The game writes settings.ini when you change something in its menu: reload it.
                 if (hasAccess) settings = BotwSettings.load(iniFile)
+                // Back from the game: save diagnostics and tell the user if it died abnormally.
+                if (hasAccess && Storage.wasLaunched(ctx)) {
+                    Storage.markLaunched(ctx, false)
+                    scope.launch {
+                        val (file, crashed) = withContext(Dispatchers.IO) { Diagnostics.save(ctx) to Diagnostics.lastGameCrashed(ctx) }
+                        if (crashed) crashLog = file.path
+                    }
+                }
             }
         }
         lifecycle.addObserver(obs); onDispose { lifecycle.removeObserver(obs) }
@@ -133,6 +144,7 @@ private fun Launcher() {
                 Spacer(Modifier.height(14.dp))
                 PillButton("PLAY", Modifier.fillMaxWidth(), enabled = valid && rpxStatus == "ok") {
                     update(settings)
+                    Storage.markLaunched(ctx, true)
                     ctx.startActivity(Intent(ctx, GameActivity::class.java).apply {
                         putExtra("BOTW_GAME", game)
                         putExtra("BOTW_USER_ROOT", Storage.userRoot.path)
@@ -141,6 +153,14 @@ private fun Launcher() {
                 Spacer(Modifier.height(10.dp))
                 Text("About / legal notice", color = Muted, fontSize = 11.sp,
                     modifier = Modifier.clickable { showLegal = true })
+                Spacer(Modifier.height(6.dp))
+                Text("Save diagnostics", color = Muted, fontSize = 11.sp,
+                    modifier = Modifier.clickable {
+                        scope.launch {
+                            val f = withContext(Dispatchers.IO) { Diagnostics.save(ctx) }
+                            crashLog = f.path
+                        }
+                    })
             }
 
             // ---- right: options (1:1 with the runtime settings.ini)
@@ -154,6 +174,14 @@ private fun Launcher() {
         }
     }
 
+    crashLog?.let { path ->
+        AlertDialog(
+            onDismissRequest = { crashLog = null },
+            confirmButton = { TextButton(onClick = { crashLog = null }) { Text("OK") } },
+            title = { Text("Diagnostics saved") },
+            text = { Text("The game process ended. A diagnostic report (exit reason, errors, runtime.log) was saved to:\n\n$path\n\nSend that file when reporting a problem.") }
+        )
+    }
     if (showLegal) LegalDialog { Storage.acceptLegal(ctx); showLegal = false }
 }
 

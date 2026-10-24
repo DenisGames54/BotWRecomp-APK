@@ -6,6 +6,6 @@ for p in "$ROOT"/patches/*.patch; do
   if git -C "$ROOT/engine" apply --check "$p" 2>/dev/null; then
     git -C "$ROOT/engine" apply "$p" && touch "$p.applied"
   else
-    echo "patch $(basename "$p"): já aplicado ou não aplica (ignorando)"; touch "$p.applied"
+    echo "patch $(basename "$p"): already applied or does not apply (skipping)"; touch "$p.applied"
   fi
 done

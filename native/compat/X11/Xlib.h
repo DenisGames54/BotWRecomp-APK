@@ -1,5 +1,5 @@
 #pragma once
-// Android: sem X11. Stub só para satisfazer Common/platform.h
+// Android: no X11. Stub only to satisfy Common/platform.h
 typedef struct _XDisplay Display;
 typedef unsigned long Window;
 typedef unsigned long XID;

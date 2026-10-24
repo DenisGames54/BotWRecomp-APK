@@ -27,3 +27,4 @@ work/
 app/src/main/jniLibs/
 app/src/main/java/org/libsdl/
 patches/*.applied
+*.tar.gz

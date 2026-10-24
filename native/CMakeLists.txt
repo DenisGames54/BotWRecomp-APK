@@ -135,4 +135,4 @@ add_custom_command(TARGET main POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:main> ${BOTW_JNILIBS}/libmain.so
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:SDL3::SDL3> ${BOTW_JNILIBS}/libSDL3.so)
 target_link_options(main PRIVATE -Wl,--strip-all)
-target_link_options(main PRIVATE -Wl,--gc-sections -Wl,--icf=all -Wl,--build-id=none)
+target_link_options(main PRIVATE -Wl,--gc-sections -Wl,--icf=safe -Wl,--build-id=none)
