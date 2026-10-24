@@ -10,6 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -42,8 +45,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        hideSystemBars()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = Accent)) { Launcher() }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
+    }
+
+    private fun hideSystemBars() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
         }
     }
 }
@@ -55,6 +72,8 @@ private fun Launcher() {
     var settings by remember { mutableStateOf(BotwSettings()) }
     var hasAccess by remember { mutableStateOf(Storage.hasAllFilesAccess()) }
     var rpxStatus by remember { mutableStateOf<String?>(null) }
+    var orient by remember { mutableStateOf(Storage.orientation(ctx)) }
+    var affinity by remember { mutableStateOf(Storage.affinity(ctx)) }
     var crashLog by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     var showLegal by remember { mutableStateOf(!Storage.legalAccepted(ctx)) }
@@ -148,6 +167,8 @@ private fun Launcher() {
                     ctx.startActivity(Intent(ctx, GameActivity::class.java).apply {
                         putExtra("BOTW_GAME", game)
                         putExtra("BOTW_USER_ROOT", Storage.userRoot.path)
+                        putExtra("BOTW_ORIENTATION", orient)
+                        putExtra("BOTW_AFFINITY", affinity)
                     })
                 }
                 Spacer(Modifier.height(10.dp))
@@ -167,6 +188,14 @@ private fun Launcher() {
             Column(Modifier.weight(0.62f).fillMaxHeight().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SettingsCards(settings, ::update)
+                SCard("Orientation") {
+                    Segmented(listOf("Landscape" to "landscape", "Portrait" to "portrait", "Auto" to "auto"), orient,
+                        { orient = it; Storage.setOrientation(ctx, it) })
+                }
+                SCard("CPU affinity") {
+                    Segmented(listOf("Auto (big cores, busiest thread on prime core)" to "auto", "Off" to "off"), affinity,
+                        { affinity = it; Storage.setAffinity(ctx, it) })
+                }
                 Text("Tap an option: it is saved to settings.ini and applies on the next start. " +
                         "Resolution only changes after restarting the game. In game, the menu button opens the same options.",
                     color = Muted, fontSize = 11.sp)

@@ -21,6 +21,12 @@ Android launcher and packaging for [BotWRecomp-Android](https://github.com/Denis
   frame rate, resolution, display mode, upscale filter, touch controls, button layout, FPS counter, gyro,
   rumble, volume. It reloads the file when you come back, so changes made in-game show up here.
 - User data (saves, cache, log, settings) lives in `/storage/emulated/0/BotWRecomp/user`.
+- Launcher-only options (not part of `settings.ini`): screen orientation (landscape / portrait / auto) and
+  CPU affinity. Affinity mirrors `linux/botw-run.sh`: the process stays on the big cores and, a few seconds
+  after start, the busiest thread (the guest main thread) is pinned to the prime core. Cores are detected from
+  `cpuinfo_max_freq`; the choice is logged (`adb logcat -s BotW`, lines starting with `affinity:`).
+- The game window is fullscreen/immersive and extends under the camera cutout. The Vulkan swapchain is not
+  pre-rotated: in landscape the compositor rotates the image (`patches/0003-*`).
 
 ## Repository layout
 ```

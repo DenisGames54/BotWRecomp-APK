@@ -42,6 +42,12 @@ object Storage {
     private const val PREFS = "botw"
     fun savedGame(c: Context): String? = c.getSharedPreferences(PREFS, 0).getString("game", null)
     fun saveGame(c: Context, path: String) = c.getSharedPreferences(PREFS, 0).edit().putString("game", path).apply()
+    /** "landscape" (default) | "portrait" | "auto" */
+    fun orientation(c: Context): String = c.getSharedPreferences(PREFS, 0).getString("orientation", "landscape") ?: "landscape"
+    fun setOrientation(c: Context, v: String) = c.getSharedPreferences(PREFS, 0).edit().putString("orientation", v).apply()
+    /** "auto" (big cores + busiest thread on the prime core) | "off" */
+    fun affinity(c: Context): String = c.getSharedPreferences(PREFS, 0).getString("affinity", "auto") ?: "auto"
+    fun setAffinity(c: Context, v: String) = c.getSharedPreferences(PREFS, 0).edit().putString("affinity", v).apply()
     fun markLaunched(c: Context, v: Boolean) = c.getSharedPreferences(PREFS, 0).edit().putBoolean("launched", v).apply()
     fun wasLaunched(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("launched", false)
     fun legalAccepted(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("legal", false)

@@ -1,0 +1,434 @@
+diff --git a/README.md b/README.md
+index 375df0a..66bd58b 100644
+--- a/README.md
++++ b/README.md
+@@ -21,6 +21,12 @@ Android launcher and packaging for [BotWRecomp-Android](https://github.com/Denis
+   frame rate, resolution, display mode, upscale filter, touch controls, button layout, FPS counter, gyro,
+   rumble, volume. It reloads the file when you come back, so changes made in-game show up here.
+ - User data (saves, cache, log, settings) lives in `/storage/emulated/0/BotWRecomp/user`.
++- Launcher-only options (not part of `settings.ini`): screen orientation (landscape / portrait / auto) and
++  CPU affinity. Affinity mirrors `linux/botw-run.sh`: the process stays on the big cores and, a few seconds
++  after start, the busiest thread (the guest main thread) is pinned to the prime core. Cores are detected from
++  `cpuinfo_max_freq`; the choice is logged (`adb logcat -s BotW`, lines starting with `affinity:`).
++- The game window is fullscreen/immersive and extends under the camera cutout. The Vulkan swapchain is not
++  pre-rotated: in landscape the compositor rotates the image (`patches/0003-*`).
+ 
+ ## Repository layout
+ ```
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 73acc3a..64a3d79 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -15,7 +15,7 @@
+             android:name=".MainActivity"
+             android:exported="true"
+             android:screenOrientation="sensorLandscape"
+-            android:configChanges="orientation|screenSize|keyboardHidden">
++            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|layoutDirection|locale|fontScale">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+                 <category android:name="android.intent.category.LAUNCHER" />
+@@ -27,7 +27,7 @@
+             android:name=".GameActivity"
+             android:exported="false"
+             android:screenOrientation="sensorLandscape"
+-            android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
++            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|layoutDirection|locale|fontScale"
+             android:process=":game" />
+     </application>
+ </manifest>
+diff --git a/app/src/main/java/io/github/denisgames54/botw/GameActivity.kt b/app/src/main/java/io/github/denisgames54/botw/GameActivity.kt
+index 43d2d3d..bb810f3 100644
+--- a/app/src/main/java/io/github/denisgames54/botw/GameActivity.kt
++++ b/app/src/main/java/io/github/denisgames54/botw/GameActivity.kt
+@@ -1,17 +1,31 @@
+ package io.github.denisgames54.botw
+ 
++import android.content.pm.ActivityInfo
++import android.os.Bundle
+ import org.libsdl.app.SDLActivity
+ 
+ /**
+  * Hosts the native runtime (libmain.so) through SDL3's SDLActivity. SDL creates the Vulkan window and
+- * forwards touch / gamepad events; the launcher passes the game folder and the user folder as arguments,
+- * which native/src/android_main.cpp turns into --game / BOTW_USER_ROOT.
++ * forwards touch / gamepad events; the launcher passes the folders and options as arguments, which
++ * native/src/android_main.cpp consumes (--game, --user-root, --orientation, --affinity).
+  */
+ class GameActivity : SDLActivity() {
++    override fun onCreate(savedInstanceState: Bundle?) {
++        // Start in the right orientation from the first frame (SDL applies its own hint later, with the same meaning)
++        requestedOrientation = when (intent.getStringExtra("BOTW_ORIENTATION")) {
++            "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
++            "auto" -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
++            else -> ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
++        }
++        super.onCreate(savedInstanceState)
++    }
++
+     override fun getLibraries(): Array<String> = arrayOf("SDL3", "main")
+ 
+     override fun getArguments(): Array<String> = arrayOf(
+         "--game", intent.getStringExtra("BOTW_GAME") ?: "",
+-        "--user-root", intent.getStringExtra("BOTW_USER_ROOT") ?: ""
++        "--user-root", intent.getStringExtra("BOTW_USER_ROOT") ?: "",
++        "--orientation", intent.getStringExtra("BOTW_ORIENTATION") ?: "landscape",
++        "--affinity", intent.getStringExtra("BOTW_AFFINITY") ?: "auto"
+     )
+ }
+diff --git a/app/src/main/java/io/github/denisgames54/botw/MainActivity.kt b/app/src/main/java/io/github/denisgames54/botw/MainActivity.kt
+index fa27ec6..29a65f9 100644
+--- a/app/src/main/java/io/github/denisgames54/botw/MainActivity.kt
++++ b/app/src/main/java/io/github/denisgames54/botw/MainActivity.kt
+@@ -10,6 +10,9 @@ import androidx.activity.compose.setContent
+ import androidx.activity.enableEdgeToEdge
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.compose.foundation.BorderStroke
++import androidx.core.view.WindowCompat
++import androidx.core.view.WindowInsetsCompat
++import androidx.core.view.WindowInsetsControllerCompat
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.*
+@@ -42,10 +45,24 @@ class MainActivity : ComponentActivity() {
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         enableEdgeToEdge()
++        hideSystemBars()
+         setContent {
+             MaterialTheme(colorScheme = darkColorScheme(primary = Accent)) { Launcher() }
+         }
+     }
++
++    override fun onWindowFocusChanged(hasFocus: Boolean) {
++        super.onWindowFocusChanged(hasFocus)
++        if (hasFocus) hideSystemBars()
++    }
++
++    private fun hideSystemBars() {
++        WindowCompat.setDecorFitsSystemWindows(window, false)
++        WindowInsetsControllerCompat(window, window.decorView).apply {
++            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
++            hide(WindowInsetsCompat.Type.systemBars())
++        }
++    }
+ }
+ 
+ @Composable
+@@ -55,6 +72,8 @@ private fun Launcher() {
+     var settings by remember { mutableStateOf(BotwSettings()) }
+     var hasAccess by remember { mutableStateOf(Storage.hasAllFilesAccess()) }
+     var rpxStatus by remember { mutableStateOf<String?>(null) }
++    var orient by remember { mutableStateOf(Storage.orientation(ctx)) }
++    var affinity by remember { mutableStateOf(Storage.affinity(ctx)) }
+     var crashLog by remember { mutableStateOf<String?>(null) }
+     val scope = rememberCoroutineScope()
+     var showLegal by remember { mutableStateOf(!Storage.legalAccepted(ctx)) }
+@@ -148,6 +167,8 @@ private fun Launcher() {
+                     ctx.startActivity(Intent(ctx, GameActivity::class.java).apply {
+                         putExtra("BOTW_GAME", game)
+                         putExtra("BOTW_USER_ROOT", Storage.userRoot.path)
++                        putExtra("BOTW_ORIENTATION", orient)
++                        putExtra("BOTW_AFFINITY", affinity)
+                     })
+                 }
+                 Spacer(Modifier.height(10.dp))
+@@ -167,6 +188,14 @@ private fun Launcher() {
+             Column(Modifier.weight(0.62f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                 SettingsCards(settings, ::update)
++                SCard("Orientation") {
++                    Segmented(listOf("Landscape" to "landscape", "Portrait" to "portrait", "Auto" to "auto"), orient,
++                        { orient = it; Storage.setOrientation(ctx, it) })
++                }
++                SCard("CPU affinity") {
++                    Segmented(listOf("Auto (big cores, busiest thread on prime core)" to "auto", "Off" to "off"), affinity,
++                        { affinity = it; Storage.setAffinity(ctx, it) })
++                }
+                 Text("Tap an option: it is saved to settings.ini and applies on the next start. " +
+                         "Resolution only changes after restarting the game. In game, the menu button opens the same options.",
+                     color = Muted, fontSize = 11.sp)
+diff --git a/app/src/main/java/io/github/denisgames54/botw/Storage.kt b/app/src/main/java/io/github/denisgames54/botw/Storage.kt
+index 0eae823..16ea86b 100644
+--- a/app/src/main/java/io/github/denisgames54/botw/Storage.kt
++++ b/app/src/main/java/io/github/denisgames54/botw/Storage.kt
+@@ -42,6 +42,12 @@ object Storage {
+     private const val PREFS = "botw"
+     fun savedGame(c: Context): String? = c.getSharedPreferences(PREFS, 0).getString("game", null)
+     fun saveGame(c: Context, path: String) = c.getSharedPreferences(PREFS, 0).edit().putString("game", path).apply()
++    /** "landscape" (default) | "portrait" | "auto" */
++    fun orientation(c: Context): String = c.getSharedPreferences(PREFS, 0).getString("orientation", "landscape") ?: "landscape"
++    fun setOrientation(c: Context, v: String) = c.getSharedPreferences(PREFS, 0).edit().putString("orientation", v).apply()
++    /** "auto" (big cores + busiest thread on the prime core) | "off" */
++    fun affinity(c: Context): String = c.getSharedPreferences(PREFS, 0).getString("affinity", "auto") ?: "auto"
++    fun setAffinity(c: Context, v: String) = c.getSharedPreferences(PREFS, 0).edit().putString("affinity", v).apply()
+     fun markLaunched(c: Context, v: Boolean) = c.getSharedPreferences(PREFS, 0).edit().putBoolean("launched", v).apply()
+     fun wasLaunched(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("launched", false)
+     fun legalAccepted(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("legal", false)
+diff --git a/app/src/main/res/values/themes.xml b/app/src/main/res/values/themes.xml
+index c3d05c2..736d5f9 100644
+--- a/app/src/main/res/values/themes.xml
++++ b/app/src/main/res/values/themes.xml
+@@ -4,5 +4,6 @@
+         <item name="android:windowBackground">@android:color/black</item>
+         <item name="android:statusBarColor">@android:color/transparent</item>
+         <item name="android:navigationBarColor">@android:color/transparent</item>
++        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+     </style>
+ </resources>
+diff --git a/native/src/android_main.cpp b/native/src/android_main.cpp
+index b37719a..37d585e 100644
+--- a/native/src/android_main.cpp
++++ b/native/src/android_main.cpp
+@@ -1,10 +1,19 @@
+ // Android entry point. SDL3's SDLActivity loads libmain.so and calls SDL_main(argc, argv); the runtime's
+ // own main() is compiled as botw_main (-Dmain=botw_main, see CMakeLists.txt), same trick as the iOS build.
+-//   argv: --game <dir with code/ content/ meta/>  --user-root <dir for saves/cache/log/settings.ini>
++//   argv from the launcher:
++//     --game <dir>            game folder (code/ content/ meta/)       -> passed through to the runtime
++//     --user-root <dir>       saves/cache/log/settings.ini            -> BOTW_USER_ROOT
++//     --orientation <o>       landscape | portrait | auto              -> SDL_HINT_ORIENTATIONS
++//     --affinity <a>          auto | off | <cpu list, e.g. 4-7>        -> CPU affinity (see below)
++#include <SDL3/SDL_hints.h>
+ #include <android/log.h>
++#include <dirent.h>
+ #include <pthread.h>
++#include <sched.h>
+ #include <unistd.h>
+ 
++#include <algorithm>
++#include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
+ #include <string>
+@@ -41,17 +50,159 @@ void redirect_stdio() {
+     pthread_create(&t, nullptr, logcat_thread, nullptr);
+     pthread_detach(t);
+ }
++
++// ------------------------------------------------------------------ CPU affinity
++// Same idea as linux/botw-run.sh: keep the whole process on the big cores (taskset -c 4-7 on a Snapdragon
++// 7+ Gen 2) and, a few seconds in, pin the busiest thread (the guest main thread) to the prime core (7).
++struct CpuPlan {
++    cpu_set_t mask;
++    int prime = -1;
++    bool valid = false;
++};
++
++long read_long(const char* path) {
++    FILE* f = fopen(path, "r");
++    if (!f) return -1;
++    long v = -1;
++    if (fscanf(f, "%ld", &v) != 1) v = -1;
++    fclose(f);
++    return v;
++}
++
++bool parse_cpulist(const char* s, std::vector<int>& out) {
++    while (*s) {
++        char* end;
++        long a = strtol(s, &end, 10);
++        if (end == s) return false;
++        long b = a;
++        if (*end == '-') { s = end + 1; b = strtol(s, &end, 10); }
++        for (long c = a; c <= b && c < CPU_SETSIZE; c++) out.push_back((int)c);
++        s = end;
++        if (*s == ',') s++;
++    }
++    return !out.empty();
++}
++
++CpuPlan make_plan(const std::string& mode) {
++    CpuPlan p;
++    CPU_ZERO(&p.mask);
++    if (mode == "off") return p;
++    int n = (int)sysconf(_SC_NPROCESSORS_CONF);
++    std::vector<long> freq(n, -1);
++    for (int c = 0; c < n; c++) {
++        char path[96];
++        snprintf(path, sizeof path, "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", c);
++        freq[c] = read_long(path);
++    }
++    std::vector<int> cpus;
++    if (mode != "auto" && parse_cpulist(mode.c_str(), cpus)) {
++        // explicit list
++    } else {
++        long minf = -1;
++        bool all = n > 0;
++        for (int c = 0; c < n; c++) { if (freq[c] <= 0) all = false; else if (minf < 0 || freq[c] < minf) minf = freq[c]; }
++        if (all) {
++            for (int c = 0; c < n; c++) if (freq[c] > minf) cpus.push_back(c);   // everything but the little cluster
++        } else if (n >= 8) {
++            cpus = {4, 5, 6, 7};                                                 // cpufreq not readable: assume 4 little + 4 big
++        }
++    }
++    if (cpus.empty()) return p;
++    for (int c : cpus) CPU_SET(c, &p.mask);
++    p.prime = cpus.back();
++    long best = -1;
++    for (int c : cpus) if (freq[c] >= best && freq[c] > 0) { best = freq[c]; p.prime = c; }  // highest max frequency (ties: highest index)
++    p.valid = true;
++    return p;
++}
++
++bool thread_ticks(int tid, unsigned long long& ticks) {  // utime + stime from /proc/self/task/<tid>/stat
++    char path[64], buf[1024];
++    snprintf(path, sizeof path, "/proc/self/task/%d/stat", tid);
++    FILE* f = fopen(path, "r");
++    if (!f) return false;
++    size_t n = fread(buf, 1, sizeof buf - 1, f);
++    fclose(f);
++    buf[n] = 0;
++    char* p = strrchr(buf, ')');                  // comm may contain spaces/parentheses
++    if (!p) return false;
++    unsigned long long ut = 0, st = 0;
++    // after ") ": state(3) ppid pgrp session tty tpgid flags minflt cminflt majflt cmajflt utime(14) stime(15)
++    if (sscanf(p + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %llu %llu", &ut, &st) != 2) return false;
++    ticks = ut + st;
++    return true;
++}
++
++std::vector<int> list_threads() {
++    std::vector<int> v;
++    if (DIR* d = opendir("/proc/self/task")) {
++        while (dirent* e = readdir(d)) if (e->d_name[0] != '.') v.push_back(atoi(e->d_name));
++        closedir(d);
++    }
++    return v;
++}
++
++CpuPlan g_plan;
++
++void* heavy_thread_pinner(void*) {
++    sleep(4);  // let the guest start its threads, like the sleep in botw-run.sh
++    std::vector<int> tids = list_threads();
++    std::vector<unsigned long long> t0(tids.size(), 0);
++    for (size_t i = 0; i < tids.size(); i++) thread_ticks(tids[i], t0[i]);
++    sleep(2);
++    int self = (int)gettid(), best_tid = -1;
++    unsigned long long best = 0;
++    for (size_t i = 0; i < tids.size(); i++) {
++        unsigned long long t1;
++        if (tids[i] == self || !thread_ticks(tids[i], t1)) continue;
++        if (t1 - t0[i] > best) { best = t1 - t0[i]; best_tid = tids[i]; }
++    }
++    if (best_tid > 0) {
++        cpu_set_t one;
++        CPU_ZERO(&one);
++        CPU_SET(g_plan.prime, &one);
++        int rc = sched_setaffinity(best_tid, sizeof one, &one);
++        fprintf(stderr, "affinity: busiest thread %d (%llu ticks in 2 s) -> cpu %d (rc %d)\n", best_tid, best, g_plan.prime, rc);
++    } else {
++        fprintf(stderr, "affinity: no busy thread found\n");
++    }
++    return nullptr;
++}
++
++void apply_affinity(const std::string& mode) {
++    g_plan = make_plan(mode);
++    if (!g_plan.valid) { fprintf(stderr, "affinity: off\n"); return; }
++    // The mask is inherited by every thread the runtime creates from here on, like `taskset -c` on the whole process.
++    int rc = sched_setaffinity(0, sizeof g_plan.mask, &g_plan.mask);
++    fprintf(stderr, "affinity: process on cpus");
++    for (int c = 0; c < CPU_SETSIZE; c++) if (CPU_ISSET(c, &g_plan.mask)) fprintf(stderr, " %d", c);
++    fprintf(stderr, " (prime %d, rc %d)\n", g_plan.prime, rc);
++    pthread_t t;
++    if (pthread_create(&t, nullptr, heavy_thread_pinner, nullptr) == 0) pthread_detach(t);
++}
+ }  // namespace
+ 
+ extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char** argv) {
+     redirect_stdio();
++    std::string orientation = "landscape", affinity = "auto";
+     std::vector<char*> args;
+     args.push_back(argv[0]);
+     for (int i = 1; i < argc; i++) {
+         if (!strcmp(argv[i], "--user-root") && i + 1 < argc) setenv("BOTW_USER_ROOT", argv[++i], 1);
++        else if (!strcmp(argv[i], "--orientation") && i + 1 < argc) orientation = argv[++i];
++        else if (!strcmp(argv[i], "--affinity") && i + 1 < argc) affinity = argv[++i];
+         else args.push_back(argv[i]);
+     }
+     args.push_back(nullptr);
++
++    // SDLActivity otherwise allows every orientation (the window is resizable)
++    const char* hint = orientation == "portrait" ? "Portrait"
++                     : orientation == "auto"     ? "LandscapeLeft LandscapeRight Portrait"
++                                                 : "LandscapeLeft LandscapeRight";
++    SDL_SetHint(SDL_HINT_ORIENTATIONS, hint);
++
++    apply_affinity(affinity);
++
+     int rc = botw_main((int)args.size() - 1, args.data());
+     __android_log_print(ANDROID_LOG_INFO, "BotW", "botw_main returned %d", rc);
+     return rc;
+diff --git a/patches/0003-android-fullscreen-and-swapchain-transform.patch b/patches/0003-android-fullscreen-and-swapchain-transform.patch
+new file mode 100644
+index 0000000..5cb445a
+--- /dev/null
++++ b/patches/0003-android-fullscreen-and-swapchain-transform.patch
+@@ -0,0 +1,65 @@
++diff --git a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/SwapchainInfoVk.cpp b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/SwapchainInfoVk.cpp
++index b27aae0..939c6a7 100644
++--- a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/SwapchainInfoVk.cpp
+++++ b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/SwapchainInfoVk.cpp
++@@ -229,8 +229,13 @@ bool SwapchainInfoVk::AcquireImage()
++ 
++ 	VkSemaphore acquireSemaphore = m_acquireSemaphores[m_acquireIndex];
++ 	VkResult result = vkAcquireNextImageKHR(m_logicalDevice, m_swapchain, 1'000'000'000, acquireSemaphore, m_imageAvailableFence, &swapchainImageIndex);
+++#if defined(__ANDROID__)
+++	if (result == VK_ERROR_OUT_OF_DATE_KHR)  // SUBOPTIMAL is expected while rotated (we do not pre-rotate): do not recreate every frame
+++		m_shouldRecreate = true;
+++#else
++ 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
++ 		m_shouldRecreate = true;
+++#endif
++ 	if (result == VK_TIMEOUT)
++ 	{
++ 		swapchainImageIndex = -1;
++@@ -392,7 +397,14 @@ VkSwapchainCreateInfoKHR SwapchainInfoVk::CreateSwapchainCreateInfo(VkSurfaceKHR
++ 	else
++ 		createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
++ 
+++#if defined(__ANDROID__)
+++	// No pre-rotation: when the device is in landscape the compositor rotates the image for us, so the renderer,
+++	// ImGui and the touch overlay keep drawing upright (pre-rotating would need a rotated final blit).
+++	createInfo.preTransform = (swapchainSupport.capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+++		? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR : swapchainSupport.capabilities.currentTransform;
+++#else
++ 	createInfo.preTransform = swapchainSupport.capabilities.currentTransform;
+++#endif
++ 	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
++ 	createInfo.presentMode = ChoosePresentMode(swapchainSupport.presentModes);
++ 	createInfo.clipped = VK_TRUE;
++diff --git a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.cpp b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.cpp
++index effd16b..dd9e867 100644
++--- a/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.cpp
+++++ b/runtime/cemu/Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.cpp
++@@ -3072,8 +3072,13 @@ void VulkanRenderer::SwapBuffer(bool mainWindow)
++ 	{
++ 		throw std::runtime_error(fmt::format("Failed to present image: {}", result));
++ 	}
+++#if defined(__ANDROID__)
+++	if(result == VK_ERROR_OUT_OF_DATE_KHR)  // see SwapchainInfoVk::AcquireImage: SUBOPTIMAL is expected on Android
+++		chainInfo.m_shouldRecreate = true;
+++#else
++ 	if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
++ 		chainInfo.m_shouldRecreate = true;
+++#endif
++ 
++ 	if(result >= 0)
++ 	{
++diff --git a/runtime/src/host/window.cpp b/runtime/src/host/window.cpp
++index 11fa7a0..31b6d4f 100644
++--- a/runtime/src/host/window.cpp
+++++ b/runtime/src/host/window.cpp
++@@ -250,6 +250,9 @@ void drawable_size(int* w, int* h) {
++ void create() {
++     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS)) LOG("SDL_Init failed: %s", SDL_GetError());
++     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+++#ifdef __ANDROID__
+++    flags |= SDL_WINDOW_FULLSCREEN;  // immersive: no status/navigation bar, content extends under the camera cutout
+++#endif
++     if (g_headless) flags |= SDL_WINDOW_HIDDEN;  // tests: render into a hidden window, never on screen
++     g_win = SDL_CreateWindow("The Legend of Zelda: Breath of the Wild", 1280, 720, flags);
++     int w, h;
