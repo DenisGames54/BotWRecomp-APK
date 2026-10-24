@@ -4,6 +4,8 @@
 #   shim, no X11/Wayland, and the guest code taken from BOTW_GENERATED (produced from YOUR dump).
 cmake_minimum_required(VERSION 3.24)
 project(BotWRecompAndroid LANGUAGES C CXX)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
