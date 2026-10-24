@@ -21,7 +21,10 @@ set(ROOT "${APKROOT}/engine" CACHE PATH "BotWRecomp-Android engine checkout (sub
 set(BOTW_DEPS "${APKROOT}/deps" CACHE PATH "third-party sources (scripts/fetch_deps.sh)")
 set(BOTW_GENERATED "${APKROOT}/work/generated" CACHE PATH "recompiled guest code (from YOUR dump)")
 set(BOTW_JNILIBS "${APKROOT}/app/src/main/jniLibs/arm64-v8a" CACHE PATH "where libmain.so / libSDL3.so are copied")
-set(BOTW_CPU "cortex-a710" CACHE STRING "-mcpu for generated code")
+# NOTE: do NOT use cortex-a710 here. That target enables SVE/SVE2, which the Snapdragon 7+ Gen 2 (POCO F5) kernel
+# does not expose (no "sve" in /proc/cpuinfo), so the compiler emits instructions (rdvl, ptrue, ...) that raise
+# SIGILL. cortex-a78 is Armv8.2-A without SVE and runs on every core of this SoC.
+set(BOTW_CPU "cortex-a78" CACHE STRING "-mcpu for generated code (must not enable SVE on devices without it)")
 set(BOTW_PGO "" CACHE STRING "PGO mode: gen | use")
 set(BOTW_PGO_DATA "" CACHE FILEPATH "merged .profdata (BOTW_PGO=use)")
 
