@@ -111,13 +111,13 @@ target_link_libraries(cemu_gpu PRIVATE SDL3::SDL3 fmt::fmt)
 # ---------------------------------------------------------------- runtime
 file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS ${ROOT}/runtime/src/*.cpp)
 list(FILTER RUNTIME_SOURCES EXCLUDE REGEX "/gpu_native/")
-list(APPEND RUNTIME_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/android_main.cpp)
+list(APPEND RUNTIME_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/android_main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_affinity.cpp)
 set_source_files_properties(${ROOT}/runtime/src/main.cpp PROPERTIES COMPILE_DEFINITIONS "main=botw_main")
 
 add_subdirectory(${ROOT}/runtime/third_party/ih264d ${CMAKE_BINARY_DIR}/ih264d EXCLUDE_FROM_ALL)
 target_include_directories(ih264d PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat)
 add_library(runtime_obj OBJECT ${RUNTIME_SOURCES})
-target_include_directories(runtime_obj PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat ${ROOT}/linux/compat
+target_include_directories(runtime_obj PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/compat ${ROOT}/linux/compat
   ${ROOT}/runtime/include ${ROOT}/runtime/src ${BOTW_GENERATED}
   ${ROOT}/runtime/third_party/ih264d ${ROOT}/runtime/src/h264)
 target_compile_options(runtime_obj PRIVATE -Wall -Wno-unused-function -Wno-unused-variable -fwrapv -flax-vector-conversions
