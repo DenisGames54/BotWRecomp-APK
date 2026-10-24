@@ -6,7 +6,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEPS="$ROOT/deps"; mkdir -p "$DEPS/downloads"
 
 fetch() {  # name version url sha256(optional)
-  local name=$1 ver=$2 url=$3 sha=${4:-} src="$DEPS/$name-$ver" file="$DEPS/downloads/$(basename "$url")"
+  local name=$1
+  local ver=$2
+  local url=$3
+  local sha=${4:-}
+  local src="$DEPS/$name-$ver"
+  local file="$DEPS/downloads/$(basename "$url")"
   [ -d "$src" ] && return 0
   echo ">> $name $ver"
   [ -f "$file" ] || curl -fL --retry 3 -o "$file" "$url"
