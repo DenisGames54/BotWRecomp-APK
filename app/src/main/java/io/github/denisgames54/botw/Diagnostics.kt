@@ -152,6 +152,13 @@ object Diagnostics {
         val sb = StringBuilder()
         val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
         deviceSection(ctx, sb)
+        val lc = logcatFiltered()
+        val rl = File(Storage.userRoot, "runtime.log")
+        // The lines that answer "which GPU driver and which cores did the game really use?"
+        sb.append("=== Summary: driver and CPU actually used ===\n")
+        val key = Regex("gpu driver:|Using GPU|Driver version|affinity:")
+        (lc.lines() + head(rl, 150).lines()).filter { key.containsMatchIn(it) }.distinct().forEach { sb.append(it.trim()).append('\n') }
+        sb.append("\n")
         gameSection(ctx, sb)
         sb.append("=== Process exit reasons (newest first) ===\n")
         val all = exits(ctx)
@@ -161,10 +168,9 @@ object Diagnostics {
         all.firstOrNull { it.processName.endsWith(":game") && it.reason == ApplicationExitInfo.REASON_CRASH_NATIVE }?.let {
             sb.append("\n=== Native crash trace of the last game crash (strings) ===\n").append(tombstoneStrings(it)).append("\n")
         }
-        sb.append("\n=== logcat: errors and BotW / SDL / libc / DEBUG / hook / driver tags ===\n").append(logcatFiltered())
+        sb.append("\n=== logcat: errors and BotW / SDL / libc / DEBUG / hook / driver tags ===\n").append(lc)
         sb.append("\n\n=== logcat: crash buffer ===\n").append(runLines("logcat", "-b", "crash", "-d", "-v", "threadtime", "-t", "300").joinToString("\n"))
         sb.append("\n\n=== logcat: raw tail (last 300 lines of this app) ===\n").append(runLines("logcat", "-d", "-v", "threadtime", "-t", "300").joinToString("\n"))
-        val rl = File(Storage.userRoot, "runtime.log")
         sb.append("\n\n=== runtime.log: start (first 80 lines) ===\n").append(head(rl, 80))
         sb.append("\n\n=== runtime.log: end (last 400 lines) ===\n").append(tail(rl, 400))
         sb.append("\n\n=== settings.ini ===\n").append(tail(File(Storage.userRoot, "settings.ini"), 40)).append('\n')
