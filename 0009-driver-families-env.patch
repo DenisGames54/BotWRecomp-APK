@@ -1,0 +1,307 @@
+diff --git a/README.md b/README.md
+index 69a36e8..d19a8f5 100644
+--- a/README.md
++++ b/README.md
+@@ -43,7 +43,15 @@ Mesa/Turnip builds on Adreno GPUs). Tap **Import driver (.zip)** in the *GPU dri
+ - Check which driver is in use in `runtime.log`: `Using GPU:` / `Driver version:`. The `BotW` logcat tag also has
+   `gpu driver:` lines. If a custom driver cannot be opened the app falls back to the system driver (and logs it);
+   if the game dies right after a driver change, the launcher offers **Use system driver**.
+-- Only Adreno is supported for now. Other vendors (Samsung Xclipse, Mali/PanVK) are planned.
++- Driver families are recognised from the package (Adreno/Turnip, Xclipse/RADV, Mali/PanVK); the launcher warns when
++  a driver does not look right for the device or needs a newer Android (`minApi`).
++- **Samsung Xclipse:** [JimVulkan/radv-xclipse](https://github.com/JimVulkan/radv-xclipse) releases. Import the plain
++  `radv-xclipse-<version>.zip` (`vulkan.radeon.so`), not the `-wayland` one (that one is for Bannerlator's Wayland mode).
++- **Mali (Bifrost only):** [JimVulkan/mali-panvk](https://github.com/JimVulkan/mali-panvk) (`libvulkan_panfrost.so`).
++- **Driver environment:** the selected driver has a *KEY=VALUE per line* box, applied to the game process
++  (for example `RADV_XCLIPSE_LOG=1`, `PANVK_DEBUG=startup`, `TU_DEBUG=...`). `LD_*` variables are ignored.
++- The Xclipse and PanVK paths use the same loader as Turnip but are untested by the author (no such device):
++  please send `diagnostics.txt` (it lists the selected driver and the device's GPU properties) when reporting problems.
+ 
+ ## Repository layout
+ ```
+diff --git a/app/src/main/java/io/github/denisgames54/botw/Diagnostics.kt b/app/src/main/java/io/github/denisgames54/botw/Diagnostics.kt
+index f8ab90f..204d76e 100644
+--- a/app/src/main/java/io/github/denisgames54/botw/Diagnostics.kt
++++ b/app/src/main/java/io/github/denisgames54/botw/Diagnostics.kt
+@@ -65,7 +65,11 @@ object Diagnostics {
+         val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+         sb.append("BotWRecomp-APK diagnostics  ${fmt.format(Date())}\n")
+         sb.append("Device: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), ABI ${Build.SUPPORTED_ABIS.joinToString()}\n")
+-        sb.append("App: ${ctx.packageName}  game folder: ${Storage.savedGame(ctx)}\n\n")
++        sb.append("App: ${ctx.packageName}  game folder: ${Storage.savedGame(ctx)}\n")
++        val drv = DriverStore.list(ctx).firstOrNull { it.id == Storage.driverId(ctx) }
++        sb.append("GPU driver: ${if (drv == null) "system" else "${drv.name} [${drv.family.label}] lib ${drv.library} minApi ${drv.minApi}"}\n")
++        if (drv != null) sb.append("Driver environment: ${Storage.driverEnv(ctx, drv.id).replace("\n", " ; ")}\n")
++        sb.append("Device GPU: ${DriverStore.deviceGpu()}\n\n")
+         sb.append("=== Process exit reasons (newest first) ===\n")
+         exits(ctx).forEach {
+             sb.append("${fmt.format(Date(it.timestamp))}  ${it.processName}  ${reasonName(it.reason)}  status=${it.status}  ${it.description ?: ""}\n")
+diff --git a/app/src/main/java/io/github/denisgames54/botw/DriverStore.kt b/app/src/main/java/io/github/denisgames54/botw/DriverStore.kt
+index fb4182a..96fc806 100644
+--- a/app/src/main/java/io/github/denisgames54/botw/DriverStore.kt
++++ b/app/src/main/java/io/github/denisgames54/botw/DriverStore.kt
+@@ -2,27 +2,42 @@ package io.github.denisgames54.botw
+ 
+ import android.content.Context
+ import android.net.Uri
++import android.os.Build
+ import org.json.JSONObject
+ import java.io.File
+ import java.io.FileOutputStream
+ import java.security.MessageDigest
+ import java.util.zip.ZipInputStream
+ 
++enum class GpuFamily(val label: String) {
++    ADRENO("Adreno / Turnip"),
++    XCLIPSE("Xclipse / RADV"),
++    MALI("Mali / PanVK"),
++    UNKNOWN("Unknown"),
++}
++
+ data class GpuDriver(
+     val id: String,
+     val name: String,
+     val vendor: String,
+     val version: String,
+     val library: String,
++    val minApi: Int,
++    val family: GpuFamily,
+     val dir: File,
+ )
+ 
++/** What the device says about its GPU (Android system properties), for compatibility hints and bug reports. */
++data class DeviceGpu(val vulkan: String, val egl: String, val platform: String) {
++    override fun toString() = "ro.hardware.vulkan=$vulkan  ro.hardware.egl=$egl  ro.board.platform=$platform"
++}
++
+ /**
+- * Custom Vulkan drivers (e.g. Mesa Turnip for Adreno) imported from .zip packages.
++ * Custom Vulkan drivers (Mesa Turnip for Adreno, RADV for Samsung Xclipse, PanVK for Mali Bifrost) imported from .zip packages.
+  *
+- * Package format (the one used by the Turnip builds shared for emulators): a zip with `meta.json`
+- * (`name`, `vendor`, `driverVersion`, `libraryName`) and the driver library (`libraryName`, e.g. vulkan.ad07XX.so).
+- * A zip without meta.json is accepted if it holds exactly one .so.
++ * Package format (the "adrenotools-style" zip these projects publish): `meta.json` (`name`, `vendor`, `driverVersion`,
++ * `minApi`, `libraryName`) plus the driver library named by `libraryName` (e.g. vulkan.ad07XX.so, vulkan.radeon.so,
++ * libvulkan_panfrost.so). A zip without meta.json is accepted if it holds exactly one .so.
+  *
+  * Drivers are stored in the app's PRIVATE storage: Android refuses to dlopen libraries from shared storage.
+  */
+@@ -42,11 +57,23 @@ object DriverStore {
+         if (d.parentFile == root(ctx)) d.deleteRecursively()
+     }
+ 
++    internal fun inferFamily(name: String, library: String, description: String): GpuFamily {
++        val t = "$name $library $description".lowercase()
++        return when {
++            "xclipse" in t || library == "vulkan.radeon.so" -> GpuFamily.XCLIPSE
++            "panvk" in t || "panfrost" in t || "mali" in t -> GpuFamily.MALI
++            "turnip" in t || "freedreno" in t || "adreno" in t || Regex("vulkan\\.ad\\d+").containsMatchIn(library) -> GpuFamily.ADRENO
++            else -> GpuFamily.UNKNOWN
++        }
++    }
++
+     private fun read(dir: File): GpuDriver? {
+         var name = dir.name
+         var vendor = "unknown"
+         var version = ""
+         var library = ""
++        var description = ""
++        var minApi = 0
+         val meta = File(dir, "meta.json")
+         if (meta.isFile) {
+             try {
+@@ -55,6 +82,8 @@ object DriverStore {
+                 vendor = j.optString("vendor", vendor)
+                 version = j.optString("driverVersion", "")
+                 library = j.optString("libraryName", "")
++                description = j.optString("description", "")
++                minApi = j.optInt("minApi", 0)
+             } catch (_: Exception) {
+             }
+         }
+@@ -64,7 +93,7 @@ object DriverStore {
+         }
+         if (library.isEmpty() || library != File(library).name) return null
+         if (!File(dir, library).isFile) return null
+-        return GpuDriver(dir.name, name, vendor, version, library, dir)
++        return GpuDriver(dir.name, name, vendor, version, library, minApi, inferFamily(name, library, description), dir)
+     }
+ 
+     /** arm64 ELF shared object? (magic, 64-bit, little endian, e_machine = EM_AARCH64) */
+@@ -122,11 +151,30 @@ object DriverStore {
+         }
+     }
+ 
+-    /** ro.hardware.vulkan of this device ("adreno", "mali", ...); empty if unknown. */
+-    fun deviceVulkanHardware(): String = try {
+-        val p = Runtime.getRuntime().exec(arrayOf("getprop", "ro.hardware.vulkan"))
+-        p.inputStream.bufferedReader().readText().trim()
++    private fun prop(name: String): String = try {
++        Runtime.getRuntime().exec(arrayOf("getprop", name)).inputStream.bufferedReader().readText().trim()
+     } catch (_: Exception) {
+         ""
+     }
++
++    fun deviceGpu() = DeviceGpu(prop("ro.hardware.vulkan"), prop("ro.hardware.egl"), prop("ro.board.platform"))
++
++    /** A short warning to show for the selected driver, or null when nothing looks wrong. */
++    fun compatNote(d: GpuDriver, dev: DeviceGpu?): String? {
++        if (d.minApi > 0 && Build.VERSION.SDK_INT < d.minApi)
++            return "This driver needs Android API ${d.minApi} or newer (this device: ${Build.VERSION.SDK_INT})."
++        val hw = ((dev?.vulkan ?: "") + " " + (dev?.egl ?: "")).lowercase()
++        val isAdreno = "adreno" in hw
++        return when (d.family) {
++            GpuFamily.ADRENO ->
++                if (hw.isNotBlank() && !isAdreno) "This is an Adreno driver, but the device reports a different GPU." else null
++            GpuFamily.XCLIPSE ->
++                if (isAdreno) "This is a Samsung Xclipse driver, but the device has an Adreno GPU."
++                else "Xclipse drivers only work on Exynos phones with an Xclipse GPU (920, 530, 940, 540, 550, 950, 960)."
++            GpuFamily.MALI ->
++                if (isAdreno) "This is a Mali driver, but the device has an Adreno GPU."
++                else "PanVK here supports Mali Bifrost GPUs only (e.g. G31/G51/G52/G71/G72/G76), not newer Valhall ones."
++            GpuFamily.UNKNOWN -> "Unknown driver type: the app cannot tell which GPU it is for."
++        }
++    }
+ }
+diff --git a/app/src/main/java/io/github/denisgames54/botw/GameActivity.kt b/app/src/main/java/io/github/denisgames54/botw/GameActivity.kt
+index 1441af9..6f744d6 100644
+--- a/app/src/main/java/io/github/denisgames54/botw/GameActivity.kt
++++ b/app/src/main/java/io/github/denisgames54/botw/GameActivity.kt
+@@ -22,6 +22,12 @@ class GameActivity : SDLActivity() {
+ 
+     override fun getLibraries(): Array<String> = arrayOf("SDL3", "main")
+ 
++    /** Valid KEY=VALUE lines from the launcher (never LD_*), as `--env KEY=VALUE` pairs. */
++    private fun envArguments(): Array<String> =
++        (intent.getStringExtra("BOTW_GPU_ENV") ?: "").lines().map { it.trim() }
++            .filter { Regex("^[A-Za-z_][A-Za-z0-9_]*=.*$").matches(it) && !it.startsWith("LD_") }
++            .flatMap { listOf("--env", it) }.toTypedArray()
++
+     override fun getArguments(): Array<String> = arrayOf(
+         "--game", intent.getStringExtra("BOTW_GAME") ?: "",
+         "--user-root", intent.getStringExtra("BOTW_USER_ROOT") ?: "",
+@@ -31,5 +37,5 @@ class GameActivity : SDLActivity() {
+         "--gpu-driver-name", intent.getStringExtra("BOTW_GPU_DRIVER_NAME") ?: "",
+         "--native-lib-dir", applicationInfo.nativeLibraryDir,
+         "--tmp-lib-dir", codeCacheDir.absolutePath
+-    )
++    ) + envArguments()
+ }
+diff --git a/app/src/main/java/io/github/denisgames54/botw/MainActivity.kt b/app/src/main/java/io/github/denisgames54/botw/MainActivity.kt
+index 328c1a7..b8319b4 100644
+--- a/app/src/main/java/io/github/denisgames54/botw/MainActivity.kt
++++ b/app/src/main/java/io/github/denisgames54/botw/MainActivity.kt
+@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.graphics.Brush
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.text.TextStyle
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+@@ -121,8 +122,9 @@ private fun Launcher() {
+     var drivers by remember { mutableStateOf(DriverStore.list(ctx)) }
+     var driverId by remember { mutableStateOf(Storage.driverId(ctx)) }
+     var driverMsg by remember { mutableStateOf<String?>(null) }
+-    var gpuHw by remember { mutableStateOf("") }
+-    LaunchedEffect(Unit) { gpuHw = withContext(Dispatchers.IO) { DriverStore.deviceVulkanHardware() } }
++    var device by remember { mutableStateOf<DeviceGpu?>(null) }
++    LaunchedEffect(Unit) { device = withContext(Dispatchers.IO) { DriverStore.deviceGpu() } }
++    var envText by remember(driverId) { mutableStateOf(Storage.driverEnv(ctx, driverId)) }
+     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+         if (uri != null) scope.launch {
+             driverMsg = "Importing..."
+@@ -194,6 +196,7 @@ private fun Launcher() {
+                         val drv = drivers.firstOrNull { it.id == driverId }
+                         putExtra("BOTW_GPU_DRIVER_DIR", drv?.dir?.path ?: "")
+                         putExtra("BOTW_GPU_DRIVER_NAME", drv?.library ?: "")
++                        putExtra("BOTW_GPU_ENV", if (drv != null) envText else "")
+                     })
+                 }
+                 Spacer(Modifier.height(10.dp))
+@@ -222,7 +225,8 @@ private fun Launcher() {
+                         { affinity = it; Storage.setAffinity(ctx, it) })
+                 }
+                 GpuDriverCard(
+-                    drivers, driverId, gpuHw, driverMsg,
++                    drivers, driverId, device, driverMsg, envText,
++                    onEnv = { envText = it; Storage.setDriverEnv(ctx, driverId, it) },
+                     onImport = { importer.launch(arrayOf("*/*")) },
+                     onSelect = { driverId = it; Storage.setDriverId(ctx, it) },
+                     onDelete = { d ->
+@@ -293,23 +297,31 @@ private fun SettingsCards(s: BotwSettings, set: (BotwSettings) -> Unit) {
+ 
+ @Composable
+ private fun GpuDriverCard(
+-    drivers: List<GpuDriver>, selected: String, gpuHw: String, message: String?,
++    drivers: List<GpuDriver>, selected: String, device: DeviceGpu?, message: String?, envText: String, onEnv: (String) -> Unit,
+     onImport: () -> Unit, onSelect: (String) -> Unit, onDelete: (GpuDriver) -> Unit
+ ) {
+     SCard("GPU driver") {
+         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+             DriverRow("System driver", "phone default", selected.isEmpty(), { onSelect("") }, null)
+             drivers.forEach { d ->
+-                DriverRow(d.name, listOf(d.vendor, d.version).filter { it.isNotBlank() }.joinToString(" · "),
++                DriverRow(d.name, listOf(d.family.label, d.vendor, d.version).filter { it.isNotBlank() }.joinToString(" · "),
+                     selected == d.id, { onSelect(d.id) }, { onDelete(d) })
+             }
++            val sel = drivers.firstOrNull { it.id == selected }
++            if (sel != null) {
++                DriverStore.compatNote(sel, device)?.let { Text(it, color = Color(0xFFFFB86B), fontSize = 11.sp) }
++                OutlinedTextField(
++                    value = envText, onValueChange = onEnv,
++                    label = { Text("Driver environment (KEY=VALUE per line)", fontSize = 11.sp) },
++                    textStyle = TextStyle(fontSize = 12.sp), minLines = 2, maxLines = 5,
++                    modifier = Modifier.fillMaxWidth()
++                )
++            }
+             Spacer(Modifier.height(4.dp))
+             PillButton("IMPORT DRIVER (.ZIP)", Modifier.fillMaxWidth()) { onImport() }
+             if (message != null) Text(message, color = Muted, fontSize = 11.sp)
+             Text("Takes effect on the next start. Drivers are kept in the app's private storage.", color = Muted, fontSize = 10.sp)
+-            if (gpuHw.isNotEmpty() && gpuHw != "adreno")
+-                Text("This device reports ro.hardware.vulkan=$gpuHw: custom drivers are only supported on Adreno for now.",
+-                    color = Color(0xFFFFB86B), fontSize = 11.sp)
++            if (device != null) Text("Device: $device", color = Muted, fontSize = 10.sp)
+         }
+     }
+ }
+diff --git a/app/src/main/java/io/github/denisgames54/botw/Storage.kt b/app/src/main/java/io/github/denisgames54/botw/Storage.kt
+index 572720b..b8840a5 100644
+--- a/app/src/main/java/io/github/denisgames54/botw/Storage.kt
++++ b/app/src/main/java/io/github/denisgames54/botw/Storage.kt
+@@ -51,6 +51,9 @@ object Storage {
+     /** id of the selected custom GPU driver ("" = system driver) */
+     fun driverId(c: Context): String = c.getSharedPreferences(PREFS, 0).getString("gpu_driver", "") ?: ""
+     fun setDriverId(c: Context, v: String) = c.getSharedPreferences(PREFS, 0).edit().putString("gpu_driver", v).apply()
++    /** KEY=VALUE lines applied to the game process when this driver is selected (e.g. RADV_XCLIPSE_LOG=1) */
++    fun driverEnv(c: Context, id: String): String = if (id.isEmpty()) "" else c.getSharedPreferences(PREFS, 0).getString("gpu_env_$id", "") ?: ""
++    fun setDriverEnv(c: Context, id: String, v: String) { if (id.isNotEmpty()) c.getSharedPreferences(PREFS, 0).edit().putString("gpu_env_$id", v).apply() }
+     fun markLaunched(c: Context, v: Boolean) = c.getSharedPreferences(PREFS, 0).edit().putBoolean("launched", v).apply()
+     fun wasLaunched(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("launched", false)
+     fun legalAccepted(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("legal", false)
+diff --git a/native/src/android_main.cpp b/native/src/android_main.cpp
+index ae88fbe..fcf1024 100644
+--- a/native/src/android_main.cpp
++++ b/native/src/android_main.cpp
+@@ -5,6 +5,7 @@
+ //     --user-root <dir>       saves/cache/log/settings.ini            -> BOTW_USER_ROOT
+ //     --orientation <o>       landscape | portrait | auto              -> SDL_HINT_ORIENTATIONS
+ //     --affinity <a>          auto | off | <cpu list, e.g. 4-7>        -> CPU affinity (see cpu_affinity.h)
++//     --env KEY=VALUE         extra environment for the process (repeatable)
+ //     --gpu-driver-dir/-name  custom Vulkan driver (see android_vulkan.cpp), empty = system driver
+ //     --native-lib-dir, --tmp-lib-dir   paths libadrenotools needs
+ #include <SDL3/SDL_hints.h>
+@@ -63,6 +64,11 @@ extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char**
+         if (!strcmp(argv[i], "--user-root") && i + 1 < argc) setenv("BOTW_USER_ROOT", argv[++i], 1);
+         else if (!strcmp(argv[i], "--orientation") && i + 1 < argc) orientation = argv[++i];
+         else if (!strcmp(argv[i], "--affinity") && i + 1 < argc) affinity = argv[++i];
++        else if (!strcmp(argv[i], "--env") && i + 1 < argc) {  // KEY=VALUE, e.g. driver switches (RADV_XCLIPSE_LOG=1)
++            std::string kv = argv[++i];
++            size_t eq = kv.find('=');
++            if (eq != std::string::npos && eq > 0) setenv(kv.substr(0, eq).c_str(), kv.substr(eq + 1).c_str(), 1);
++        }
+         else if (!strcmp(argv[i], "--gpu-driver-dir") && i + 1 < argc) setenv("BOTW_GPU_DRIVER_DIR", argv[++i], 1);
+         else if (!strcmp(argv[i], "--gpu-driver-name") && i + 1 < argc) setenv("BOTW_GPU_DRIVER_NAME", argv[++i], 1);
+         else if (!strcmp(argv[i], "--native-lib-dir") && i + 1 < argc) setenv("BOTW_NATIVE_LIB_DIR", argv[++i], 1);

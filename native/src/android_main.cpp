@@ -5,6 +5,7 @@
 //     --user-root <dir>       saves/cache/log/settings.ini            -> BOTW_USER_ROOT
 //     --orientation <o>       landscape | portrait | auto              -> SDL_HINT_ORIENTATIONS
 //     --affinity <a>          auto | off | <cpu list, e.g. 4-7>        -> CPU affinity (see cpu_affinity.h)
+//     --env KEY=VALUE         extra environment for the process (repeatable)
 //     --gpu-driver-dir/-name  custom Vulkan driver (see android_vulkan.cpp), empty = system driver
 //     --native-lib-dir, --tmp-lib-dir   paths libadrenotools needs
 #include <SDL3/SDL_hints.h>
@@ -63,6 +64,11 @@ extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char** 
         if (!strcmp(argv[i], "--user-root") && i + 1 < argc) setenv("BOTW_USER_ROOT", argv[++i], 1);
         else if (!strcmp(argv[i], "--orientation") && i + 1 < argc) orientation = argv[++i];
         else if (!strcmp(argv[i], "--affinity") && i + 1 < argc) affinity = argv[++i];
+        else if (!strcmp(argv[i], "--env") && i + 1 < argc) {  // KEY=VALUE, e.g. driver switches (RADV_XCLIPSE_LOG=1)
+            std::string kv = argv[++i];
+            size_t eq = kv.find('=');
+            if (eq != std::string::npos && eq > 0) setenv(kv.substr(0, eq).c_str(), kv.substr(eq + 1).c_str(), 1);
+        }
         else if (!strcmp(argv[i], "--gpu-driver-dir") && i + 1 < argc) setenv("BOTW_GPU_DRIVER_DIR", argv[++i], 1);
         else if (!strcmp(argv[i], "--gpu-driver-name") && i + 1 < argc) setenv("BOTW_GPU_DRIVER_NAME", argv[++i], 1);
         else if (!strcmp(argv[i], "--native-lib-dir") && i + 1 < argc) setenv("BOTW_NATIVE_LIB_DIR", argv[++i], 1);

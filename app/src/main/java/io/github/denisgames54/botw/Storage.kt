@@ -51,6 +51,9 @@ object Storage {
     /** id of the selected custom GPU driver ("" = system driver) */
     fun driverId(c: Context): String = c.getSharedPreferences(PREFS, 0).getString("gpu_driver", "") ?: ""
     fun setDriverId(c: Context, v: String) = c.getSharedPreferences(PREFS, 0).edit().putString("gpu_driver", v).apply()
+    /** KEY=VALUE lines applied to the game process when this driver is selected (e.g. RADV_XCLIPSE_LOG=1) */
+    fun driverEnv(c: Context, id: String): String = if (id.isEmpty()) "" else c.getSharedPreferences(PREFS, 0).getString("gpu_env_$id", "") ?: ""
+    fun setDriverEnv(c: Context, id: String, v: String) { if (id.isNotEmpty()) c.getSharedPreferences(PREFS, 0).edit().putString("gpu_env_$id", v).apply() }
     fun markLaunched(c: Context, v: Boolean) = c.getSharedPreferences(PREFS, 0).edit().putBoolean("launched", v).apply()
     fun wasLaunched(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("launched", false)
     fun legalAccepted(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("legal", false)

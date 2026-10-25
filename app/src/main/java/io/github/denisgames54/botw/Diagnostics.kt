@@ -65,7 +65,11 @@ object Diagnostics {
         val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
         sb.append("BotWRecomp-APK diagnostics  ${fmt.format(Date())}\n")
         sb.append("Device: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), ABI ${Build.SUPPORTED_ABIS.joinToString()}\n")
-        sb.append("App: ${ctx.packageName}  game folder: ${Storage.savedGame(ctx)}\n\n")
+        sb.append("App: ${ctx.packageName}  game folder: ${Storage.savedGame(ctx)}\n")
+        val drv = DriverStore.list(ctx).firstOrNull { it.id == Storage.driverId(ctx) }
+        sb.append("GPU driver: ${if (drv == null) "system" else "${drv.name} [${drv.family.label}] lib ${drv.library} minApi ${drv.minApi}"}\n")
+        if (drv != null) sb.append("Driver environment: ${Storage.driverEnv(ctx, drv.id).replace("\n", " ; ")}\n")
+        sb.append("Device GPU: ${DriverStore.deviceGpu()}\n\n")
         sb.append("=== Process exit reasons (newest first) ===\n")
         exits(ctx).forEach {
             sb.append("${fmt.format(Date(it.timestamp))}  ${it.processName}  ${reasonName(it.reason)}  status=${it.status}  ${it.description ?: ""}\n")

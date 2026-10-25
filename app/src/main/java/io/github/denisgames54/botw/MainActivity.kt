@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -121,8 +122,9 @@ private fun Launcher() {
     var drivers by remember { mutableStateOf(DriverStore.list(ctx)) }
     var driverId by remember { mutableStateOf(Storage.driverId(ctx)) }
     var driverMsg by remember { mutableStateOf<String?>(null) }
-    var gpuHw by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) { gpuHw = withContext(Dispatchers.IO) { DriverStore.deviceVulkanHardware() } }
+    var device by remember { mutableStateOf<DeviceGpu?>(null) }
+    LaunchedEffect(Unit) { device = withContext(Dispatchers.IO) { DriverStore.deviceGpu() } }
+    var envText by remember(driverId) { mutableStateOf(Storage.driverEnv(ctx, driverId)) }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             driverMsg = "Importing..."
@@ -194,6 +196,7 @@ private fun Launcher() {
                         val drv = drivers.firstOrNull { it.id == driverId }
                         putExtra("BOTW_GPU_DRIVER_DIR", drv?.dir?.path ?: "")
                         putExtra("BOTW_GPU_DRIVER_NAME", drv?.library ?: "")
+                        putExtra("BOTW_GPU_ENV", if (drv != null) envText else "")
                     })
                 }
                 Spacer(Modifier.height(10.dp))
@@ -222,7 +225,8 @@ private fun Launcher() {
                         { affinity = it; Storage.setAffinity(ctx, it) })
                 }
                 GpuDriverCard(
-                    drivers, driverId, gpuHw, driverMsg,
+                    drivers, driverId, device, driverMsg, envText,
+                    onEnv = { envText = it; Storage.setDriverEnv(ctx, driverId, it) },
                     onImport = { importer.launch(arrayOf("*/*")) },
                     onSelect = { driverId = it; Storage.setDriverId(ctx, it) },
                     onDelete = { d ->
@@ -293,23 +297,31 @@ private fun SettingsCards(s: BotwSettings, set: (BotwSettings) -> Unit) {
 
 @Composable
 private fun GpuDriverCard(
-    drivers: List<GpuDriver>, selected: String, gpuHw: String, message: String?,
+    drivers: List<GpuDriver>, selected: String, device: DeviceGpu?, message: String?, envText: String, onEnv: (String) -> Unit,
     onImport: () -> Unit, onSelect: (String) -> Unit, onDelete: (GpuDriver) -> Unit
 ) {
     SCard("GPU driver") {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             DriverRow("System driver", "phone default", selected.isEmpty(), { onSelect("") }, null)
             drivers.forEach { d ->
-                DriverRow(d.name, listOf(d.vendor, d.version).filter { it.isNotBlank() }.joinToString(" · "),
+                DriverRow(d.name, listOf(d.family.label, d.vendor, d.version).filter { it.isNotBlank() }.joinToString(" · "),
                     selected == d.id, { onSelect(d.id) }, { onDelete(d) })
+            }
+            val sel = drivers.firstOrNull { it.id == selected }
+            if (sel != null) {
+                DriverStore.compatNote(sel, device)?.let { Text(it, color = Color(0xFFFFB86B), fontSize = 11.sp) }
+                OutlinedTextField(
+                    value = envText, onValueChange = onEnv,
+                    label = { Text("Driver environment (KEY=VALUE per line)", fontSize = 11.sp) },
+                    textStyle = TextStyle(fontSize = 12.sp), minLines = 2, maxLines = 5,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
             Spacer(Modifier.height(4.dp))
             PillButton("IMPORT DRIVER (.ZIP)", Modifier.fillMaxWidth()) { onImport() }
             if (message != null) Text(message, color = Muted, fontSize = 11.sp)
             Text("Takes effect on the next start. Drivers are kept in the app's private storage.", color = Muted, fontSize = 10.sp)
-            if (gpuHw.isNotEmpty() && gpuHw != "adreno")
-                Text("This device reports ro.hardware.vulkan=$gpuHw: custom drivers are only supported on Adreno for now.",
-                    color = Color(0xFFFFB86B), fontSize = 11.sp)
+            if (device != null) Text("Device: $device", color = Muted, fontSize = 10.sp)
         }
     }
 }

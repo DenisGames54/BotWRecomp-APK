@@ -2,11 +2,19 @@ package io.github.denisgames54.botw
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
+
+enum class GpuFamily(val label: String) {
+    ADRENO("Adreno / Turnip"),
+    XCLIPSE("Xclipse / RADV"),
+    MALI("Mali / PanVK"),
+    UNKNOWN("Unknown"),
+}
 
 data class GpuDriver(
     val id: String,
@@ -14,15 +22,22 @@ data class GpuDriver(
     val vendor: String,
     val version: String,
     val library: String,
+    val minApi: Int,
+    val family: GpuFamily,
     val dir: File,
 )
 
+/** What the device says about its GPU (Android system properties), for compatibility hints and bug reports. */
+data class DeviceGpu(val vulkan: String, val egl: String, val platform: String) {
+    override fun toString() = "ro.hardware.vulkan=$vulkan  ro.hardware.egl=$egl  ro.board.platform=$platform"
+}
+
 /**
- * Custom Vulkan drivers (e.g. Mesa Turnip for Adreno) imported from .zip packages.
+ * Custom Vulkan drivers (Mesa Turnip for Adreno, RADV for Samsung Xclipse, PanVK for Mali Bifrost) imported from .zip packages.
  *
- * Package format (the one used by the Turnip builds shared for emulators): a zip with `meta.json`
- * (`name`, `vendor`, `driverVersion`, `libraryName`) and the driver library (`libraryName`, e.g. vulkan.ad07XX.so).
- * A zip without meta.json is accepted if it holds exactly one .so.
+ * Package format (the "adrenotools-style" zip these projects publish): `meta.json` (`name`, `vendor`, `driverVersion`,
+ * `minApi`, `libraryName`) plus the driver library named by `libraryName` (e.g. vulkan.ad07XX.so, vulkan.radeon.so,
+ * libvulkan_panfrost.so). A zip without meta.json is accepted if it holds exactly one .so.
  *
  * Drivers are stored in the app's PRIVATE storage: Android refuses to dlopen libraries from shared storage.
  */
@@ -42,11 +57,23 @@ object DriverStore {
         if (d.parentFile == root(ctx)) d.deleteRecursively()
     }
 
+    internal fun inferFamily(name: String, library: String, description: String): GpuFamily {
+        val t = "$name $library $description".lowercase()
+        return when {
+            "xclipse" in t || library == "vulkan.radeon.so" -> GpuFamily.XCLIPSE
+            "panvk" in t || "panfrost" in t || "mali" in t -> GpuFamily.MALI
+            "turnip" in t || "freedreno" in t || "adreno" in t || Regex("vulkan\\.ad\\d+").containsMatchIn(library) -> GpuFamily.ADRENO
+            else -> GpuFamily.UNKNOWN
+        }
+    }
+
     private fun read(dir: File): GpuDriver? {
         var name = dir.name
         var vendor = "unknown"
         var version = ""
         var library = ""
+        var description = ""
+        var minApi = 0
         val meta = File(dir, "meta.json")
         if (meta.isFile) {
             try {
@@ -55,6 +82,8 @@ object DriverStore {
                 vendor = j.optString("vendor", vendor)
                 version = j.optString("driverVersion", "")
                 library = j.optString("libraryName", "")
+                description = j.optString("description", "")
+                minApi = j.optInt("minApi", 0)
             } catch (_: Exception) {
             }
         }
@@ -64,7 +93,7 @@ object DriverStore {
         }
         if (library.isEmpty() || library != File(library).name) return null
         if (!File(dir, library).isFile) return null
-        return GpuDriver(dir.name, name, vendor, version, library, dir)
+        return GpuDriver(dir.name, name, vendor, version, library, minApi, inferFamily(name, library, description), dir)
     }
 
     /** arm64 ELF shared object? (magic, 64-bit, little endian, e_machine = EM_AARCH64) */
@@ -122,11 +151,30 @@ object DriverStore {
         }
     }
 
-    /** ro.hardware.vulkan of this device ("adreno", "mali", ...); empty if unknown. */
-    fun deviceVulkanHardware(): String = try {
-        val p = Runtime.getRuntime().exec(arrayOf("getprop", "ro.hardware.vulkan"))
-        p.inputStream.bufferedReader().readText().trim()
+    private fun prop(name: String): String = try {
+        Runtime.getRuntime().exec(arrayOf("getprop", name)).inputStream.bufferedReader().readText().trim()
     } catch (_: Exception) {
         ""
+    }
+
+    fun deviceGpu() = DeviceGpu(prop("ro.hardware.vulkan"), prop("ro.hardware.egl"), prop("ro.board.platform"))
+
+    /** A short warning to show for the selected driver, or null when nothing looks wrong. */
+    fun compatNote(d: GpuDriver, dev: DeviceGpu?): String? {
+        if (d.minApi > 0 && Build.VERSION.SDK_INT < d.minApi)
+            return "This driver needs Android API ${d.minApi} or newer (this device: ${Build.VERSION.SDK_INT})."
+        val hw = ((dev?.vulkan ?: "") + " " + (dev?.egl ?: "")).lowercase()
+        val isAdreno = "adreno" in hw
+        return when (d.family) {
+            GpuFamily.ADRENO ->
+                if (hw.isNotBlank() && !isAdreno) "This is an Adreno driver, but the device reports a different GPU." else null
+            GpuFamily.XCLIPSE ->
+                if (isAdreno) "This is a Samsung Xclipse driver, but the device has an Adreno GPU."
+                else "Xclipse drivers only work on Exynos phones with an Xclipse GPU (920, 530, 940, 540, 550, 950, 960)."
+            GpuFamily.MALI ->
+                if (isAdreno) "This is a Mali driver, but the device has an Adreno GPU."
+                else "PanVK here supports Mali Bifrost GPUs only (e.g. G31/G51/G52/G71/G72/G76), not newer Valhall ones."
+            GpuFamily.UNKNOWN -> "Unknown driver type: the app cannot tell which GPU it is for."
+        }
     }
 }

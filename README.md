@@ -43,7 +43,15 @@ Mesa/Turnip builds on Adreno GPUs). Tap **Import driver (.zip)** in the *GPU dri
 - Check which driver is in use in `runtime.log`: `Using GPU:` / `Driver version:`. The `BotW` logcat tag also has
   `gpu driver:` lines. If a custom driver cannot be opened the app falls back to the system driver (and logs it);
   if the game dies right after a driver change, the launcher offers **Use system driver**.
-- Only Adreno is supported for now. Other vendors (Samsung Xclipse, Mali/PanVK) are planned.
+- Driver families are recognised from the package (Adreno/Turnip, Xclipse/RADV, Mali/PanVK); the launcher warns when
+  a driver does not look right for the device or needs a newer Android (`minApi`).
+- **Samsung Xclipse:** [JimVulkan/radv-xclipse](https://github.com/JimVulkan/radv-xclipse) releases. Import the plain
+  `radv-xclipse-<version>.zip` (`vulkan.radeon.so`), not the `-wayland` one (that one is for Bannerlator's Wayland mode).
+- **Mali (Bifrost only):** [JimVulkan/mali-panvk](https://github.com/JimVulkan/mali-panvk) (`libvulkan_panfrost.so`).
+- **Driver environment:** the selected driver has a *KEY=VALUE per line* box, applied to the game process
+  (for example `RADV_XCLIPSE_LOG=1`, `PANVK_DEBUG=startup`, `TU_DEBUG=...`). `LD_*` variables are ignored.
+- The Xclipse and PanVK paths use the same loader as Turnip but are untested by the author (no such device):
+  please send `diagnostics.txt` (it lists the selected driver and the device's GPU properties) when reporting problems.
 
 ## Repository layout
 ```

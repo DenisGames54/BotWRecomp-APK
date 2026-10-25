@@ -22,6 +22,12 @@ class GameActivity : SDLActivity() {
 
     override fun getLibraries(): Array<String> = arrayOf("SDL3", "main")
 
+    /** Valid KEY=VALUE lines from the launcher (never LD_*), as `--env KEY=VALUE` pairs. */
+    private fun envArguments(): Array<String> =
+        (intent.getStringExtra("BOTW_GPU_ENV") ?: "").lines().map { it.trim() }
+            .filter { Regex("^[A-Za-z_][A-Za-z0-9_]*=.*$").matches(it) && !it.startsWith("LD_") }
+            .flatMap { listOf("--env", it) }.toTypedArray()
+
     override fun getArguments(): Array<String> = arrayOf(
         "--game", intent.getStringExtra("BOTW_GAME") ?: "",
         "--user-root", intent.getStringExtra("BOTW_USER_ROOT") ?: "",
@@ -31,5 +37,5 @@ class GameActivity : SDLActivity() {
         "--gpu-driver-name", intent.getStringExtra("BOTW_GPU_DRIVER_NAME") ?: "",
         "--native-lib-dir", applicationInfo.nativeLibraryDir,
         "--tmp-lib-dir", codeCacheDir.absolutePath
-    )
+    ) + envArguments()
 }
