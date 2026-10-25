@@ -26,6 +26,10 @@ class GameActivity : SDLActivity() {
         "--game", intent.getStringExtra("BOTW_GAME") ?: "",
         "--user-root", intent.getStringExtra("BOTW_USER_ROOT") ?: "",
         "--orientation", intent.getStringExtra("BOTW_ORIENTATION") ?: "landscape",
-        "--affinity", intent.getStringExtra("BOTW_AFFINITY") ?: "auto"
+        "--affinity", intent.getStringExtra("BOTW_AFFINITY") ?: "auto",
+        "--gpu-driver-dir", intent.getStringExtra("BOTW_GPU_DRIVER_DIR") ?: "",
+        "--gpu-driver-name", intent.getStringExtra("BOTW_GPU_DRIVER_NAME") ?: "",
+        "--native-lib-dir", applicationInfo.nativeLibraryDir,
+        "--tmp-lib-dir", codeCacheDir.absolutePath
     )
 }

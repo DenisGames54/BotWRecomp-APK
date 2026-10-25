@@ -42,6 +42,14 @@ clone() {  # dir url tag
 clone glslang https://github.com/KhronosGroup/glslang.git 15.0.0
 clone glm https://github.com/g-truc/glm.git 1.0.1
 
+# libadrenotools (BSD-2-Clause, Billy Laws): custom GPU driver loading. Pinned commit + its linkernsbypass submodule.
+if [ ! -d "$DEPS/libadrenotools" ]; then
+  echo ">> libadrenotools"
+  git clone https://github.com/bylaws/libadrenotools "$DEPS/libadrenotools"
+  git -C "$DEPS/libadrenotools" checkout 8fae8ce254dfc1344527e05301e43f37dea2df80
+  git -C "$DEPS/libadrenotools" submodule update --init --recursive
+fi
+
 # SDL3 Android glue (SDLActivity & co.), not committed to this repo
 J="$ROOT/app/src/main/java/org/libsdl/app"
 if [ ! -f "$J/SDLActivity.java" ]; then

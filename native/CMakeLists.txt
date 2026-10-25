@@ -69,6 +69,9 @@ set(GLSLANG_INC ${CMAKE_BINARY_DIR}/glslang_inc)
 file(MAKE_DIRECTORY ${GLSLANG_INC}/glslang)
 file(CREATE_LINK ${BOTW_DEPS}/glslang/SPIRV ${GLSLANG_INC}/glslang/SPIRV SYMBOLIC)
 
+# libadrenotools: opens a private copy of the system libvulkan that runs a custom GPU driver (e.g. Turnip)
+add_subdirectory(${BOTW_DEPS}/libadrenotools adrenotools EXCLUDE_FROM_ALL)
+
 # ---------------------------------------------------------------- guest code (your dump)
 file(GLOB GUEST_SOURCES CONFIGURE_DEPENDS ${BOTW_GENERATED}/fn_*.cpp ${BOTW_GENERATED}/big_*.cpp
   ${BOTW_GENERATED}/huge_*.cpp ${BOTW_GENERATED}/table.cpp ${BOTW_GENERATED}/hle_stubs.cpp)
@@ -111,13 +114,14 @@ target_link_libraries(cemu_gpu PRIVATE SDL3::SDL3 fmt::fmt)
 # ---------------------------------------------------------------- runtime
 file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS ${ROOT}/runtime/src/*.cpp)
 list(FILTER RUNTIME_SOURCES EXCLUDE REGEX "/gpu_native/")
-list(APPEND RUNTIME_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/android_main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_affinity.cpp)
+list(APPEND RUNTIME_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/android_main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_affinity.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/android_vulkan.cpp)
 set_source_files_properties(${ROOT}/runtime/src/main.cpp PROPERTIES COMPILE_DEFINITIONS "main=botw_main")
 
 add_subdirectory(${ROOT}/runtime/third_party/ih264d ${CMAKE_BINARY_DIR}/ih264d EXCLUDE_FROM_ALL)
 target_include_directories(ih264d PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat)
 add_library(runtime_obj OBJECT ${RUNTIME_SOURCES})
-target_include_directories(runtime_obj PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/compat ${ROOT}/linux/compat
+target_include_directories(runtime_obj PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${BOTW_DEPS}/libadrenotools/include ${CMAKE_CURRENT_SOURCE_DIR}/compat ${ROOT}/linux/compat
   ${ROOT}/runtime/include ${ROOT}/runtime/src ${BOTW_GENERATED}
   ${ROOT}/runtime/third_party/ih264d ${ROOT}/runtime/src/h264)
 target_compile_options(runtime_obj PRIVATE -Wall -Wno-unused-function -Wno-unused-variable -fwrapv -flax-vector-conversions
@@ -130,12 +134,18 @@ set(GLSLANG_LIBS glslang SPIRV)
 if(TARGET glslang-default-resource-limits)
   list(APPEND GLSLANG_LIBS glslang-default-resource-limits)
 endif()
-target_link_libraries(main PRIVATE SDL3::SDL3 fmt::fmt libzstd_static ${GLSLANG_LIBS} ih264d android log z dl)
+target_link_libraries(main PRIVATE SDL3::SDL3 fmt::fmt libzstd_static ${GLSLANG_LIBS} ih264d adrenotools android log z dl)
+add_dependencies(main hook_impl main_hook file_redirect_hook gsl_alloc_hook)
 target_link_options(main PRIVATE -Wl,-z,max-page-size=16384 -Wl,--gc-sections ${PGO_LINK})
 
 add_custom_command(TARGET main POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory ${BOTW_JNILIBS}
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:main> ${BOTW_JNILIBS}/libmain.so
-  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:SDL3::SDL3> ${BOTW_JNILIBS}/libSDL3.so)
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:SDL3::SDL3> ${BOTW_JNILIBS}/libSDL3.so
+  # libadrenotools hooks: must sit in nativeLibraryDir (the app is packaged with useLegacyPackaging = true)
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:hook_impl> ${BOTW_JNILIBS}/libhook_impl.so
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:main_hook> ${BOTW_JNILIBS}/libmain_hook.so
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:file_redirect_hook> ${BOTW_JNILIBS}/libfile_redirect_hook.so
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:gsl_alloc_hook> ${BOTW_JNILIBS}/libgsl_alloc_hook.so)
 target_link_options(main PRIVATE -Wl,--strip-all)
 target_link_options(main PRIVATE -Wl,--gc-sections -Wl,--icf=safe -Wl,--build-id=none)

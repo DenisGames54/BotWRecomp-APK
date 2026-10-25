@@ -48,6 +48,9 @@ object Storage {
     /** "auto" (big cores + busiest thread on the prime core) | "off" */
     fun affinity(c: Context): String = c.getSharedPreferences(PREFS, 0).getString("affinity", "auto") ?: "auto"
     fun setAffinity(c: Context, v: String) = c.getSharedPreferences(PREFS, 0).edit().putString("affinity", v).apply()
+    /** id of the selected custom GPU driver ("" = system driver) */
+    fun driverId(c: Context): String = c.getSharedPreferences(PREFS, 0).getString("gpu_driver", "") ?: ""
+    fun setDriverId(c: Context, v: String) = c.getSharedPreferences(PREFS, 0).edit().putString("gpu_driver", v).apply()
     fun markLaunched(c: Context, v: Boolean) = c.getSharedPreferences(PREFS, 0).edit().putBoolean("launched", v).apply()
     fun wasLaunched(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("launched", false)
     fun legalAccepted(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("legal", false)

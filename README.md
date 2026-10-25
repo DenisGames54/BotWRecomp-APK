@@ -30,6 +30,21 @@ Android launcher and packaging for [BotWRecomp-Android](https://github.com/Denis
 - The game window is fullscreen/immersive and extends under the camera cutout. The Vulkan swapchain is not
   pre-rotated: in landscape the compositor rotates the image (`patches/0003-*`).
 
+## Custom GPU drivers (Turnip)
+The launcher can import a custom Vulkan driver and use it instead of the phone's own (useful to compare FPS between
+Mesa/Turnip builds on Adreno GPUs). Tap **Import driver (.zip)** in the *GPU driver* card:
+
+- Package format: a `.zip` with `meta.json` (`name`, `vendor`, `driverVersion`, `libraryName`) and the driver library
+  named by `libraryName` (e.g. `vulkan.ad07XX.so`, arm64). A zip with a single `.so` and no `meta.json` also works.
+- Drivers are copied to the app's **private** storage (Android refuses to load libraries from shared storage).
+- The selection takes effect on the next start. The loader is [libadrenotools](https://github.com/bylaws/libadrenotools)
+  (BSD-2-Clause), which opens a private copy of the system `libvulkan.so` that runs the custom driver; the Vulkan
+  surface is created through that same loader (`patches/0005-*`).
+- Check which driver is in use in `runtime.log`: `Using GPU:` / `Driver version:`. The `BotW` logcat tag also has
+  `gpu driver:` lines. If a custom driver cannot be opened the app falls back to the system driver (and logs it);
+  if the game dies right after a driver change, the launcher offers **Use system driver**.
+- Only Adreno is supported for now. Other vendors (Samsung Xclipse, Mali/PanVK) are planned.
+
 ## Repository layout
 ```
 engine/    submodule: BotWRecomp-Android (runtime, Cemu GPU layer, recompiler)

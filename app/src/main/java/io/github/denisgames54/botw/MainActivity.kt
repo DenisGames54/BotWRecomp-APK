@@ -118,6 +118,28 @@ private fun Launcher() {
         }
     }
 
+    var drivers by remember { mutableStateOf(DriverStore.list(ctx)) }
+    var driverId by remember { mutableStateOf(Storage.driverId(ctx)) }
+    var driverMsg by remember { mutableStateOf<String?>(null) }
+    var gpuHw by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) { gpuHw = withContext(Dispatchers.IO) { DriverStore.deviceVulkanHardware() } }
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            driverMsg = "Importing..."
+            driverMsg = try {
+                val d = withContext(Dispatchers.IO) { DriverStore.import(ctx, uri) }
+                drivers = DriverStore.list(ctx)
+                driverId = d.id
+                Storage.setDriverId(ctx, d.id)
+                "Imported ${d.name} and selected it."
+            } catch (e: IllegalArgumentException) {
+                e.message
+            } catch (e: Exception) {
+                "Import failed: ${e.message}"
+            }
+        }
+    }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val p = uri?.let { Storage.treeUriToPath(it) }
         if (p != null) { game = p; Storage.saveGame(ctx, p) }
@@ -169,6 +191,9 @@ private fun Launcher() {
                         putExtra("BOTW_USER_ROOT", Storage.userRoot.path)
                         putExtra("BOTW_ORIENTATION", orient)
                         putExtra("BOTW_AFFINITY", affinity)
+                        val drv = drivers.firstOrNull { it.id == driverId }
+                        putExtra("BOTW_GPU_DRIVER_DIR", drv?.dir?.path ?: "")
+                        putExtra("BOTW_GPU_DRIVER_NAME", drv?.library ?: "")
                     })
                 }
                 Spacer(Modifier.height(10.dp))
@@ -196,6 +221,16 @@ private fun Launcher() {
                     Segmented(listOf("Auto (big cores, busiest thread on prime core)" to "auto", "Off" to "off"), affinity,
                         { affinity = it; Storage.setAffinity(ctx, it) })
                 }
+                GpuDriverCard(
+                    drivers, driverId, gpuHw, driverMsg,
+                    onImport = { importer.launch(arrayOf("*/*")) },
+                    onSelect = { driverId = it; Storage.setDriverId(ctx, it) },
+                    onDelete = { d ->
+                        DriverStore.delete(ctx, d.id)
+                        drivers = DriverStore.list(ctx)
+                        if (driverId == d.id) { driverId = ""; Storage.setDriverId(ctx, "") }
+                    }
+                )
                 Text("Tap an option: it is saved to settings.ini and applies on the next start. " +
                         "Resolution only changes after restarting the game. In game, the menu button opens the same options.",
                     color = Muted, fontSize = 11.sp)
@@ -204,11 +239,16 @@ private fun Launcher() {
     }
 
     crashLog?.let { path ->
+        val systemDriverButton: (@Composable () -> Unit)? = if (driverId.isNotEmpty()) ({
+            TextButton(onClick = { driverId = ""; Storage.setDriverId(ctx, ""); crashLog = null }) { Text("Use system driver") }
+        }) else null
         AlertDialog(
             onDismissRequest = { crashLog = null },
             confirmButton = { TextButton(onClick = { crashLog = null }) { Text("OK") } },
+            dismissButton = systemDriverButton,
             title = { Text("Diagnostics saved") },
-            text = { Text("The game process ended. A diagnostic report (exit reason, errors, runtime.log) was saved to:\n\n$path\n\nSend that file when reporting a problem.") }
+            text = { Text("The game process ended. A diagnostic report (exit reason, errors, runtime.log) was saved to:\n\n$path\n\nSend that file when reporting a problem." +
+                    (if (driverId.isNotEmpty()) "\n\nA custom GPU driver is selected: if the game fails at start, try the system driver." else "")) }
         )
     }
     if (showLegal) LegalDialog { Storage.acceptLegal(ctx); showLegal = false }
@@ -248,6 +288,41 @@ private fun SettingsCards(s: BotwSettings, set: (BotwSettings) -> Unit) {
     }
     SCard("Volume: ${s.volume}%") {
         Slider(value = s.volume.toFloat(), onValueChange = { set(s.copy(volume = it.toInt())) }, valueRange = 0f..100f)
+    }
+}
+
+@Composable
+private fun GpuDriverCard(
+    drivers: List<GpuDriver>, selected: String, gpuHw: String, message: String?,
+    onImport: () -> Unit, onSelect: (String) -> Unit, onDelete: (GpuDriver) -> Unit
+) {
+    SCard("GPU driver") {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            DriverRow("System driver", "phone default", selected.isEmpty(), { onSelect("") }, null)
+            drivers.forEach { d ->
+                DriverRow(d.name, listOf(d.vendor, d.version).filter { it.isNotBlank() }.joinToString(" · "),
+                    selected == d.id, { onSelect(d.id) }, { onDelete(d) })
+            }
+            Spacer(Modifier.height(4.dp))
+            PillButton("IMPORT DRIVER (.ZIP)", Modifier.fillMaxWidth()) { onImport() }
+            if (message != null) Text(message, color = Muted, fontSize = 11.sp)
+            Text("Takes effect on the next start. Drivers are kept in the app's private storage.", color = Muted, fontSize = 10.sp)
+            if (gpuHw.isNotEmpty() && gpuHw != "adreno")
+                Text("This device reports ro.hardware.vulkan=$gpuHw: custom drivers are only supported on Adreno for now.",
+                    color = Color(0xFFFFB86B), fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun DriverRow(title: String, sub: String, selected: Boolean, onSelect: () -> Unit, onDelete: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().clickable { onSelect() }, verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(selected = selected, onClick = onSelect)
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+            if (sub.isNotBlank()) Text(sub, color = Muted, fontSize = 10.sp)
+        }
+        if (onDelete != null) Text("✕", color = Muted, fontSize = 16.sp, modifier = Modifier.clickable { onDelete() }.padding(10.dp))
     }
 }
 
