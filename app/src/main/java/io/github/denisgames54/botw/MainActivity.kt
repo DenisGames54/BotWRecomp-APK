@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +47,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        Lang.init(this)
         hideSystemBars()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = Accent)) { Launcher() }
@@ -127,17 +129,17 @@ private fun Launcher() {
     var envText by remember(driverId) { mutableStateOf(Storage.driverEnv(ctx, driverId)) }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
-            driverMsg = "Importing..."
+            driverMsg = tr("Importing...")
             driverMsg = try {
                 val d = withContext(Dispatchers.IO) { DriverStore.import(ctx, uri) }
                 drivers = DriverStore.list(ctx)
                 driverId = d.id
                 Storage.setDriverId(ctx, d.id)
-                "Imported ${d.name} and selected it."
+                tr("Imported %s and selected it.").format(d.name)
             } catch (e: IllegalArgumentException) {
                 e.message
             } catch (e: Exception) {
-                "Import failed: ${e.message}"
+                tr("Import failed: %s").format(e.message)
             }
         }
     }
@@ -150,6 +152,7 @@ private fun Launcher() {
     val valid = game != null && hasAccess && Storage.looksValid(game!!)
 
     Box(Modifier.fillMaxSize().background(Bg).safeDrawingPadding().padding(16.dp)) {
+        LanguagePicker(Modifier.align(Alignment.TopEnd).zIndex(1f))
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             // ---- left: identity + folder + play
             Column(
@@ -171,9 +174,9 @@ private fun Launcher() {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     when {
-                        !hasAccess -> "Tap to grant \"All files access\" (the game is read straight from the folder, nothing is copied)."
-                        game == null -> "Choose the folder that contains code/, content/ and meta/ from your own dump."
-                        !Storage.looksValid(game!!) -> "Invalid folder: code/U-King.rpx, content/ or meta/ is missing.\n$game"
+                        !hasAccess -> Msg.GRANT
+                        game == null -> Msg.CHOOSE_DIR
+                        !Storage.looksValid(game!!) -> tr(Msg.INVALID) + "\n$game"
                         else -> game!!
                     },
                     color = if (hasAccess && game != null && !valid) Color(0xFFFFB86B) else Muted,
@@ -235,8 +238,7 @@ private fun Launcher() {
                         if (driverId == d.id) { driverId = ""; Storage.setDriverId(ctx, "") }
                     }
                 )
-                Text("Tap an option: it is saved to settings.ini and applies on the next start. " +
-                        "Resolution only changes after restarting the game. In game, the menu button opens the same options.",
+                Text(Msg.HINT,
                     color = Muted, fontSize = 11.sp)
             }
         }
@@ -251,8 +253,8 @@ private fun Launcher() {
             confirmButton = { TextButton(onClick = { crashLog = null }) { Text("OK") } },
             dismissButton = systemDriverButton,
             title = { Text("Diagnostics saved") },
-            text = { Text("The game process ended. A diagnostic report (exit reason, errors, runtime.log) was saved to:\n\n$path\n\nSend that file when reporting a problem." +
-                    (if (driverId.isNotEmpty()) "\n\nA custom GPU driver is selected: if the game fails at start, try the system driver." else "")) }
+            text = { Text(tr(Msg.CRASH_BODY).format(path) +
+                    (if (driverId.isNotEmpty()) "\n\n" + tr(Msg.CRASH_DRIVER) else "")) }
         )
     }
     if (showLegal) LegalDialog { Storage.acceptLegal(ctx); showLegal = false }
@@ -290,7 +292,7 @@ private fun SettingsCards(s: BotwSettings, set: (BotwSettings) -> Unit) {
         ToggleCard("Gyro aiming", "controller gyro aims", s.gyro, { set(s.copy(gyro = it)) }, Modifier.weight(1f))
         ToggleCard("Rumble", "controller vibration", s.rumble, { set(s.copy(rumble = it)) }, Modifier.weight(1f))
     }
-    SCard("Volume: ${s.volume}%") {
+    SCard(tr("Volume") + ": ${s.volume}%") {
         Slider(value = s.volume.toFloat(), onValueChange = { set(s.copy(volume = it.toInt())) }, valueRange = 0f..100f)
     }
 }
@@ -321,7 +323,7 @@ private fun GpuDriverCard(
             PillButton("IMPORT DRIVER (.ZIP)", Modifier.fillMaxWidth()) { onImport() }
             if (message != null) Text(message, color = Muted, fontSize = 11.sp)
             Text("Takes effect on the next start. Drivers are kept in the app's private storage.", color = Muted, fontSize = 10.sp)
-            if (device != null) Text("Device: $device", color = Muted, fontSize = 10.sp)
+            if (device != null) Text(tr("Device") + ": $device", color = Muted, fontSize = 10.sp)
         }
     }
 }
@@ -404,11 +406,35 @@ private fun LegalDialog(onAccept: () -> Unit) {
         title = { Text("Legal notice") },
         text = {
             Text(
-                "This project does NOT provide the game or any protected files (ROMs, keys, dumps or game code). " +
-                        "It is only a tool. You need your own legally obtained Wii U dump (USA, update 1.6.0 / v208). " +
-                        "The APK is generated on your own machine from your own dump and must not be distributed.\n\n" +
-                        "Unofficial project. Recompiler and runtime by Ishaan Kalra; the Vulkan renderer and H.264 decoder come from Cemu."
+                Msg.LEGAL
             )
         }
     )
+}
+
+/** Every launcher text goes through tr(): this shadows material3's Text for plain-String calls. */
+@Composable
+private fun Text(
+    text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified,
+    fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+    fontWeight: FontWeight? = null,
+    letterSpacing: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+) {
+    androidx.compose.material3.Text(text = tr(text), modifier = modifier, color = color, fontSize = fontSize,
+        fontWeight = fontWeight, letterSpacing = letterSpacing)
+}
+
+@Composable
+private fun LanguagePicker(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        androidx.compose.material3.Text("\uD83C\uDF10 ${Lang.tag}", color = Muted, fontSize = 11.sp,
+            modifier = Modifier.clickable { open = true }.padding(8.dp))
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Lang.options.forEach { (tag, name) ->
+                DropdownMenuItem(text = { androidx.compose.material3.Text(name) }, onClick = { Lang.set(ctx, tag); open = false })
+            }
+        }
+    }
 }

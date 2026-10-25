@@ -28,3 +28,6 @@ app/src/main/jniLibs/
 app/src/main/java/org/libsdl/
 patches/*.applied
 *.tar.gz
+
+# patches I apply with `git apply` from the repo root are not part of the project (patches/ is)
+/*.patch

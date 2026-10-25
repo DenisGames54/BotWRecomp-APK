@@ -162,7 +162,7 @@ object DriverStore {
     /** A short warning to show for the selected driver, or null when nothing looks wrong. */
     fun compatNote(d: GpuDriver, dev: DeviceGpu?): String? {
         if (d.minApi > 0 && Build.VERSION.SDK_INT < d.minApi)
-            return "This driver needs Android API ${d.minApi} or newer (this device: ${Build.VERSION.SDK_INT})."
+            return tr("This driver needs Android API %d or newer (this device: %d).").format(d.minApi, Build.VERSION.SDK_INT)
         val hw = ((dev?.vulkan ?: "") + " " + (dev?.egl ?: "")).lowercase()
         val isAdreno = "adreno" in hw
         return when (d.family) {
