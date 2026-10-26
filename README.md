@@ -94,6 +94,12 @@ symbols is kept as `build/native/libmain.unstripped.so` (the APK has a stripped 
 scripts/symbolize.sh diagnostics.txt     # must be the build that crashed
 ```
 
+The Android entry point also arms its own reporter (`native/src/crash_report.cpp`) before `botw_main`, so faults during
+SDL/JNI/driver setup and uncaught C++ exceptions are reported too. It prints `=== BotW crash report #N ===` with
+PC/LR/SP/FP, x0-x29, a system unwind plus a frame-pointer walk (each frame as `module+0xoffset`), and appends the same
+text to `<user root>/crash.txt` (included in `diagnostics.txt`). The runtime replaces the handlers a few ms later, so the
+reporter re-arms itself and chains guest-memory faults back to the runtime, which keeps handling them as before.
+
 ## Roadmap
 1. Launcher (done).
 2. NDK build of the runtime + `GameActivity` (SDL3) + touch controls (in progress).

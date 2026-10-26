@@ -115,7 +115,7 @@ target_link_libraries(cemu_gpu PRIVATE SDL3::SDL3 fmt::fmt)
 file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS ${ROOT}/runtime/src/*.cpp)
 list(FILTER RUNTIME_SOURCES EXCLUDE REGEX "/gpu_native/")
 list(APPEND RUNTIME_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/android_main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_affinity.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/android_vulkan.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/android_vulkan.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/crash_report.cpp)
 set_source_files_properties(${ROOT}/runtime/src/main.cpp PROPERTIES COMPILE_DEFINITIONS "main=botw_main")
 
 add_subdirectory(${ROOT}/runtime/third_party/ih264d ${CMAKE_BINARY_DIR}/ih264d EXCLUDE_FROM_ALL)

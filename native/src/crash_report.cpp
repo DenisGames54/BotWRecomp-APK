@@ -254,10 +254,14 @@ static void handler(int sig, siginfo_t* info, void* uctx) {
   const struct sigaction& prev = g_old[i];
   bool has_prev_fn = g_have_old[i] && prev.sa_handler != SIG_DFL && prev.sa_handler != SIG_IGN;
 
+  bool reported = false;
   // Re-entrancy: a crash inside the reporter must not loop.
   if (g_in_report.exchange(1) == 0) {
     int saved_errno = errno;
-    if (g_reports.load() < 32 && should_report(sig, info, has_prev_fn)) report(sig, info, uctx);
+    if (g_reports.load() < 32 && should_report(sig, info, has_prev_fn)) {
+      report(sig, info, uctx);
+      reported = true;
+    }
     errno = saved_errno;
     g_in_report.store(0);
   } else {
@@ -265,13 +269,16 @@ static void handler(int sig, siginfo_t* info, void* uctx) {
     return;
   }
 
-  if (has_prev_fn) {
+  // Guest-memory fault: the runtime's handler is chained here and knows how to inject it into the guest. It does
+  // not return (rt_trap is noreturn), so it must run before anything else and must not be duplicated by us.
+  if (!reported && has_prev_fn) {
     if (prev.sa_flags & SA_SIGINFO) prev.sa_sigaction(sig, info, uctx);
     else prev.sa_handler(sig);
     return;
   }
-  if (g_have_old[i] && prev.sa_handler == SIG_IGN) return;
-  // Default action: let debuggerd write a full tombstone (visible via `adb logcat -b crash`).
+  if (!reported && g_have_old[i] && prev.sa_handler == SIG_IGN) return;
+  // We kept the report (host fault, or nobody else handles it): default action, so debuggerd writes a full
+  // tombstone (`adb logcat -b crash`). Chaining to the runtime here would only print a second report.
   signal(sig, SIG_DFL);
   if (sig == SIGABRT || sig == SIGILL || sig == SIGTRAP || sig == SIGFPE) raise(sig);
   // For SIGSEGV/SIGBUS returning re-executes the faulting instruction -> default action.

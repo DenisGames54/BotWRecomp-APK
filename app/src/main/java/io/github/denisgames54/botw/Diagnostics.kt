@@ -168,6 +168,9 @@ object Diagnostics {
         all.firstOrNull { it.processName.endsWith(":game") && it.reason == ApplicationExitInfo.REASON_CRASH_NATIVE }?.let {
             sb.append("\n=== Native crash trace of the last game crash (strings) ===\n").append(tombstoneStrings(it)).append("\n")
         }
+        // Written by the reporter armed in native/src/android_main.cpp (survives a process kill, unlike logcat)
+        sb.append("\n=== crash.txt: last native crash report (last 80 lines) ===\n")
+            .append(tail(File(Storage.userRoot, "crash.txt"), 80)).append('\n')
         sb.append("\n=== logcat: errors and BotW / SDL / libc / DEBUG / hook / driver tags ===\n").append(lc)
         sb.append("\n\n=== logcat: crash buffer ===\n").append(runLines("logcat", "-b", "crash", "-d", "-v", "threadtime", "-t", "300").joinToString("\n"))
         sb.append("\n\n=== logcat: raw tail (last 300 lines of this app) ===\n").append(runLines("logcat", "-d", "-v", "threadtime", "-t", "300").joinToString("\n"))

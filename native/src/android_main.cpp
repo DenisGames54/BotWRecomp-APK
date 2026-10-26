@@ -11,17 +11,25 @@
 #include <SDL3/SDL_hints.h>
 #include <android/log.h>
 #include <pthread.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "cpu_affinity.h"
+#include "crash_report.h"
 
 int botw_main(int argc, char** argv);
+
+// Base of the guest address space, set by the runtime's mem::init() inside botw_main (extern "C" in ppc.h).
+// Used only to tell the crash reporter which faults belong to the game and must go to the runtime's handler.
+extern "C" uint8_t* g_mem;
 
 namespace {
 int g_pipe[2];
@@ -53,6 +61,18 @@ void redirect_stdio() {
     pthread_detach(t);
 }
 
+// The runtime creates <user root> in botw_main, but the crash reporter is armed before that: create the folder
+// (and its parent, e.g. /storage/emulated/0/BotWRecomp) now, so the first crash is not lost to a missing path.
+std::string ensure_user_root() {
+    const char* root = getenv("BOTW_USER_ROOT");
+    if (!root || !*root) return std::string();
+    std::string dir = root;
+    for (size_t i = 1; i <= dir.size(); i++) {
+        if (i == dir.size() || dir[i] == '/') mkdir(dir.substr(0, i).c_str(), 0755);
+    }
+    return dir;
+}
+
 }  // namespace
 
 extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char** argv) {
@@ -82,6 +102,20 @@ extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char** 
                      : orientation == "auto"     ? "LandscapeLeft LandscapeRight Portrait"
                                                  : "LandscapeLeft LandscapeRight";
     SDL_SetHint(SDL_HINT_ORIENTATIONS, hint);
+
+    // Crash reporter: armed before botw_main, so faults while SDL/JNI/the GPU driver are being set up are reported
+    // too. botw_main installs the runtime's own handlers a few ms later (they replace ours), so re-arm from a helper
+    // thread until that has happened; guest-memory faults are still handed to the runtime handler (see crash_report.h).
+    const std::string userRoot = ensure_user_root();
+    const std::string crashLog = userRoot.empty() ? std::string() : userRoot + "/crash.txt";
+    botw::crash_report_install(crashLog.empty() ? nullptr : crashLog.c_str());
+    std::thread([] {
+        for (int i = 0; i < 13; i++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(150));
+            botw::crash_report_install(nullptr);  // no-op unless the runtime replaced our handlers
+            if (g_mem) botw::crash_report_set_guest_range((uintptr_t)g_mem, (1ull << 32) + 0x10000);
+        }
+    }).detach();
 
     cpuaff::apply(cpuaff::detect(affinity));
 

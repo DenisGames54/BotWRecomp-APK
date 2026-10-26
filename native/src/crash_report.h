@@ -1,7 +1,8 @@
 // Crash reporter for the Android build: logs PC/LR/SP, registers and a symbolized
 // backtrace (module + offset, resolved from /proc/self/maps) for fatal signals,
-// then chains to whatever handler was installed before (so the engine's own
-// guest-memory fault handling keeps working).
+// then, for faults it does not report (guest memory), chains to whatever handler
+// was installed before — so the engine's own guest-memory fault handling keeps
+// working. Faults it did report end with the default action (debuggerd tombstone).
 #pragma once
 #include <cstddef>
 #include <cstdint>
