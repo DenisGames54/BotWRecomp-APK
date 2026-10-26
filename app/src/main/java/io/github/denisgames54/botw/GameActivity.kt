@@ -22,6 +22,14 @@ class GameActivity : SDLActivity() {
 
     override fun getLibraries(): Array<String> = arrayOf("SDL3", "main")
 
+    /** Host loop (native/src/android_main.cpp): leaves the layout editor, closes the open panel or opens the drawer. */
+    private external fun nativeBackPressed(): Boolean
+
+    /** Back opens the in-game drawer (edit / reset touch layout, quit) instead of leaving the game. */
+    override fun onBackPressed() {
+        if (!nativeBackPressed()) super.onBackPressed()
+    }
+
     /** Valid KEY=VALUE lines from the launcher (never LD_*), as `--env KEY=VALUE` pairs. */
     private fun envArguments(): Array<String> =
         (intent.getStringExtra("BOTW_GPU_ENV") ?: "").lines().map { it.trim() }

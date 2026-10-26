@@ -18,7 +18,7 @@ Android launcher and packaging for [BotWRecomp-Android](https://github.com/Denis
   internal storage (needs "All files access").
 - Verifies the SHA-256 of `U-King.rpx` (USA v208).
 - Edits the runtime's real options by writing the same `settings.ini` the in-game menu uses:
-  frame rate, resolution, display mode, upscale filter, touch controls, camera sensitivity, button layout,
+  frame rate, resolution, display mode, upscale filter, touch controls, button layout,
   FPS counter, gyro, rumble, volume. It reloads the file when you come back, so changes made in-game show up here.
 - User data (saves, cache, log, settings) lives in `/storage/emulated/0/BotWRecomp/user`.
 - Launcher-only options (not part of `settings.ini`): screen orientation (landscape / portrait / auto) and
@@ -36,15 +36,20 @@ floating left stick on the left half, and the camera on the right half (drag to 
 button collapses everything to itself and back. While a physical controller is connected the pad is hidden in
 **Auto** mode.
 
-- **Camera sensitivity** (launcher card, in-game menu row, `settings.ini` key `cam_sens`, 0.3–3.0): scales the
-  right stick after the touch, keyboard, controller and script inputs are merged, so the touch drag and a
-  physical controller use the same feel. 1.0 is the game's own speed.
-- **Layout editor**: open the in-game menu (touch menu button, touchpad, L3+R3 or F1) and choose
-  **Edit touch layout**. Every control can be dragged, including the floating stick's home ring; the green
+- **Camera sensitivity** (in-game menu row, `settings.ini` key `cam_sens`, 0.3–3.0): scales the right stick after
+  the touch, keyboard, controller and script inputs are merged, so the touch drag and a physical controller use
+  the same feel. 1.0 is the game's own speed.
+- **Back-button drawer** (in game): the phone's back button slides in a panel on the right with **Edit touch
+  layout**, **Reset touch layout** (two presses: the first arms it, the second confirms) and **Quit game**. Back
+  again closes it; while the layout editor is open, back just leaves the editor and saves. Back no longer exits
+  the game directly — use **Quit game** in the drawer.
+- **Layout editor**: use the drawer or open the in-game menu (touch menu button, touchpad, L3+R3 or F1) and
+  choose **Edit touch layout**. Every control can be dragged, including the floating stick's home ring; the green
   check in the middle saves and leaves. The game receives no touch input while editing, and controls are kept
   inside the safe area (the stick home stays on the left half, where it can be grabbed). Positions are stored
   in `settings.ini` (`touch_layout`) in design points relative to the default layout, so they survive rotations
-  and launcher rewrites; empty = default.
+  and launcher rewrites; empty = default. **Reset touch layout** clears `touch_layout` and puts every control
+  back to the default position.
 - `BOTW_TOUCH_TEST="edit"` (see `engine/runtime/src/host/touch.cpp`) exercises the editor headlessly: enter,
   drag A, check the game is idle, tap the check, reset.
 

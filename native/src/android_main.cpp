@@ -10,6 +10,7 @@
 //     --native-lib-dir, --tmp-lib-dir   paths libadrenotools needs
 #include <SDL3/SDL_hints.h>
 #include <android/log.h>
+#include <jni.h>
 #include <pthread.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -24,12 +25,20 @@
 
 #include "cpu_affinity.h"
 #include "crash_report.h"
+#include "host/window.h"
 
 int botw_main(int argc, char** argv);
 
 // Base of the guest address space, set by the runtime's mem::init() inside botw_main (extern "C" in ppc.h).
 // Used only to tell the crash reporter which faults belong to the game and must go to the runtime's handler.
 extern "C" uint8_t* g_mem;
+
+// Android back button (GameActivity.onBackPressed -> JNI, UI thread). The host loop leaves the touch-layout
+// editor, closes the open panel or shows the drawer. False before the loop runs, so Kotlin finishes the activity.
+extern "C" __attribute__((visibility("default"))) jboolean JNICALL
+Java_io_github_denisgames54_botw_GameActivity_nativeBackPressed(JNIEnv*, jobject) {
+    return window::request_back() ? JNI_TRUE : JNI_FALSE;
+}
 
 namespace {
 int g_pipe[2];

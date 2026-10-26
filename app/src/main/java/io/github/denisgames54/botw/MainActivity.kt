@@ -292,13 +292,6 @@ private fun SettingsCards(s: BotwSettings, set: (BotwSettings) -> Unit) {
             Segmented(listOf("A on the right" to 0, "A at the bottom" to 1), s.layout, { set(s.copy(layout = it)) })
         }
     }
-    SCard(tr("Camera sensitivity") + ": " + "%.1f".format(s.camSens) + "x") {
-        Slider(value = s.camSens, onValueChange = { set(s.copy(camSens = kotlin.math.round(it * 10f) / 10f)) },
-            valueRange = 0.3f..3f)
-        Text(tr("Right stick: touch drag and physical controller. 1.0x is the game's own feel."), color = Muted, fontSize = 10.sp)
-        Text(tr("To move the on-screen controls, open the in-game menu (touch menu button or L3+R3) and choose Edit touch layout."),
-            color = Muted, fontSize = 10.sp)
-    }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         ToggleCard("FPS counter", "shows FPS in game", s.showFps, { set(s.copy(showFps = it)) }, Modifier.weight(1f))
         ToggleCard("Gyro aiming", "controller gyro aims", s.gyro, { set(s.copy(gyro = it)) }, Modifier.weight(1f))
