@@ -18,8 +18,8 @@ Android launcher and packaging for [BotWRecomp-Android](https://github.com/Denis
   internal storage (needs "All files access").
 - Verifies the SHA-256 of `U-King.rpx` (USA v208).
 - Edits the runtime's real options by writing the same `settings.ini` the in-game menu uses:
-  frame rate, resolution, display mode, upscale filter, touch controls, button layout, FPS counter, gyro,
-  rumble, volume. It reloads the file when you come back, so changes made in-game show up here.
+  frame rate, resolution, display mode, upscale filter, touch controls, camera sensitivity, button layout,
+  FPS counter, gyro, rumble, volume. It reloads the file when you come back, so changes made in-game show up here.
 - User data (saves, cache, log, settings) lives in `/storage/emulated/0/BotWRecomp/user`.
 - Launcher-only options (not part of `settings.ini`): screen orientation (landscape / portrait / auto) and
   CPU affinity. The runtime keeps the game on the device's performance cores and pins its busiest thread (the
@@ -29,6 +29,24 @@ Android launcher and packaging for [BotWRecomp-Android](https://github.com/Denis
   `native/tests/cpu_affinity_test.cpp`). The decision is logged: `adb logcat -s BotW | grep -i -E "affinity|cpu[0-9]"`.
 - The game window is fullscreen/immersive and extends under the camera cutout. The Vulkan swapchain is not
   pre-rotated: in landscape the compositor rotates the image (`patches/0003-*`).
+
+## Touch controls
+The on-screen pad follows the Wii U layout: A/B/X/Y on the right, ZL/ZR/L/R in the top corners, the D-pad and a
+floating left stick on the left half, and the camera on the right half (drag to move the right stick). The eye
+button collapses everything to itself and back. While a physical controller is connected the pad is hidden in
+**Auto** mode.
+
+- **Camera sensitivity** (launcher card, in-game menu row, `settings.ini` key `cam_sens`, 0.3–3.0): scales the
+  right stick after the touch, keyboard, controller and script inputs are merged, so the touch drag and a
+  physical controller use the same feel. 1.0 is the game's own speed.
+- **Layout editor**: open the in-game menu (touch menu button, touchpad, L3+R3 or F1) and choose
+  **Edit touch layout**. Every control can be dragged, including the floating stick's home ring; the green
+  check in the middle saves and leaves. The game receives no touch input while editing, and controls are kept
+  inside the safe area (the stick home stays on the left half, where it can be grabbed). Positions are stored
+  in `settings.ini` (`touch_layout`) in design points relative to the default layout, so they survive rotations
+  and launcher rewrites; empty = default.
+- `BOTW_TOUCH_TEST="edit"` (see `engine/runtime/src/host/touch.cpp`) exercises the editor headlessly: enter,
+  drag A, check the game is idle, tap the check, reset.
 
 ## Custom GPU drivers (Turnip)
 The launcher can import a custom Vulkan driver and use it instead of the phone's own (useful to compare FPS between

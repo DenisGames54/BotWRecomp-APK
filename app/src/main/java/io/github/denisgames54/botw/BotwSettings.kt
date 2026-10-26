@@ -19,6 +19,8 @@ data class BotwSettings(
     val volume: Int = 100,        // 0..100
     val touch: Int = 1,           // 0 auto, 1 on, 2 off
     val touchHidden: Boolean = false,
+    val camSens: Float = 1f,      // right stick (camera) multiplier: 0.3 .. 3, 1 = game default
+    val touchLayout: String = "", // on-screen control offsets, set by the in-game layout editor
 ) {
     fun toIni(): String {
         fun b(v: Boolean) = if (v) 1 else 0
@@ -29,6 +31,7 @@ data class BotwSettings(
             append("fps=$fps\nscale=$sc\ndisplay=$display\nfilter=$filter\n")
             append("gyro=${b(gyro)}\nrumble=${b(rumble)}\nlayout=$layout\n")
             append("show_fps=${b(showFps)}\nvolume=$volume\ntouch=$touch\ntouch_hidden=${b(touchHidden)}\n")
+            append("cam_sens=$camSens\ntouch_layout=$touchLayout\n")
         }
     }
 
@@ -57,6 +60,8 @@ data class BotwSettings(
                     "volume" -> s.copy(volume = (n ?: 100).coerceIn(0, 100))
                     "touch" -> s.copy(touch = (n ?: 1).coerceIn(0, 2))
                     "touch_hidden" -> s.copy(touchHidden = n != 0)
+                    "cam_sens" -> s.copy(camSens = (v.toFloatOrNull() ?: 1f).coerceIn(0.3f, 3f))
+                    "touch_layout" -> s.copy(touchLayout = v)
                     else -> s
                 }
             }
