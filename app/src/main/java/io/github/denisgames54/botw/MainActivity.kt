@@ -189,18 +189,23 @@ private fun Launcher() {
                 }
                 Spacer(Modifier.height(14.dp))
                 PillButton("PLAY", Modifier.fillMaxWidth(), enabled = valid && rpxStatus == "ok") {
-                    update(settings)
-                    Storage.markLaunched(ctx, true)
-                    ctx.startActivity(Intent(ctx, GameActivity::class.java).apply {
-                        putExtra("BOTW_GAME", game)
-                        putExtra("BOTW_USER_ROOT", Storage.userRoot.path)
-                        putExtra("BOTW_ORIENTATION", orient)
-                        putExtra("BOTW_AFFINITY", affinity)
-                        val drv = drivers.firstOrNull { it.id == driverId }
-                        putExtra("BOTW_GPU_DRIVER_DIR", drv?.dir?.path ?: "")
-                        putExtra("BOTW_GPU_DRIVER_NAME", drv?.library ?: "")
-                        putExtra("BOTW_GPU_ENV", if (drv != null) envText else "")
-                    })
+                    scope.launch {
+                        update(settings)
+                        // A different driver compiles different shaders: start from an empty cache folder
+                        if (Storage.cacheDriver(ctx) != driverId) withContext(Dispatchers.IO) { Storage.clearShaderCache() }
+                        Storage.setCacheDriver(ctx, driverId)
+                        Storage.markLaunched(ctx, true)
+                        ctx.startActivity(Intent(ctx, GameActivity::class.java).apply {
+                            putExtra("BOTW_GAME", game)
+                            putExtra("BOTW_USER_ROOT", Storage.userRoot.path)
+                            putExtra("BOTW_ORIENTATION", orient)
+                            putExtra("BOTW_AFFINITY", affinity)
+                            val drv = drivers.firstOrNull { it.id == driverId }
+                            putExtra("BOTW_GPU_DRIVER_DIR", drv?.dir?.path ?: "")
+                            putExtra("BOTW_GPU_DRIVER_NAME", drv?.library ?: "")
+                            putExtra("BOTW_GPU_ENV", if (drv != null) envText else "")
+                        })
+                    }
                 }
                 Spacer(Modifier.height(10.dp))
                 Text("About / legal notice", color = Muted, fontSize = 11.sp,
@@ -318,11 +323,14 @@ private fun GpuDriverCard(
                     textStyle = TextStyle(fontSize = 12.sp), minLines = 2, maxLines = 5,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (sel.family == GpuFamily.MALI)
+                    Text("PANVK_HEAP_MB, PANVK_TILER_HEAP_MB, PANVK_POLY_HEAP_MB, PANVK_STENCIL_LATE, PANVK_TRACE", color = Muted, fontSize = 10.sp)
             }
             Spacer(Modifier.height(4.dp))
             PillButton("IMPORT DRIVER (.ZIP)", Modifier.fillMaxWidth()) { onImport() }
             if (message != null) Text(message, color = Muted, fontSize = 11.sp)
             Text("Takes effect on the next start. Drivers are kept in the app's private storage.", color = Muted, fontSize = 10.sp)
+            Text("Changing the driver clears the shader cache.", color = Muted, fontSize = 10.sp)
             if (device != null) Text(tr("Device") + ": $device", color = Muted, fontSize = 10.sp)
         }
     }

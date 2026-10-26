@@ -140,12 +140,13 @@ target_link_options(main PRIVATE -Wl,-z,max-page-size=16384 -Wl,--gc-sections ${
 
 add_custom_command(TARGET main POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory ${BOTW_JNILIBS}
-  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:main> ${BOTW_JNILIBS}/libmain.so
+  # symbols stay in build/native/libmain.unstripped.so (scripts/symbolize.sh); the APK gets the stripped copy
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:main> ${CMAKE_BINARY_DIR}/libmain.unstripped.so
+  COMMAND ${CMAKE_STRIP} --strip-all -o ${BOTW_JNILIBS}/libmain.so $<TARGET_FILE:main>
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:SDL3::SDL3> ${BOTW_JNILIBS}/libSDL3.so
   # libadrenotools hooks: must sit in nativeLibraryDir (the app is packaged with useLegacyPackaging = true)
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:hook_impl> ${BOTW_JNILIBS}/libhook_impl.so
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:main_hook> ${BOTW_JNILIBS}/libmain_hook.so
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:file_redirect_hook> ${BOTW_JNILIBS}/libfile_redirect_hook.so
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:gsl_alloc_hook> ${BOTW_JNILIBS}/libgsl_alloc_hook.so)
-target_link_options(main PRIVATE -Wl,--strip-all)
 target_link_options(main PRIVATE -Wl,--gc-sections -Wl,--icf=safe -Wl,--build-id=none)

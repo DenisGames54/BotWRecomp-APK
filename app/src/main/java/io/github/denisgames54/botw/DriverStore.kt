@@ -173,7 +173,7 @@ object DriverStore {
                 else "Xclipse drivers only work on Exynos phones with an Xclipse GPU (920, 530, 940, 540, 550, 950, 960)."
             GpuFamily.MALI ->
                 if (isAdreno) "This is a Mali driver, but the device has an Adreno GPU."
-                else "PanVK here supports Mali Bifrost GPUs only (e.g. G31/G51/G52/G71/G72/G76), not newer Valhall ones."
+                else "Mali drivers here target Job Manager GPUs (Bifrost G31-G76, Valhall G57-G78); newer CSF GPUs (G610, G710, G715, Immortalis) are not supported."
             GpuFamily.UNKNOWN -> "Unknown driver type: the app cannot tell which GPU it is for."
         }
     }

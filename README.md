@@ -40,6 +40,7 @@ Mesa/Turnip builds on Adreno GPUs). Tap **Import driver (.zip)** in the *GPU dri
 - The selection takes effect on the next start. The loader is [libadrenotools](https://github.com/bylaws/libadrenotools)
   (BSD-2-Clause), which opens a private copy of the system `libvulkan.so` that runs the custom driver; the Vulkan
   surface is created through that same loader (`patches/0005-*`).
+- Selecting a different driver clears the `cache` folder (compiled shaders) the next time you press PLAY; saves are not touched.
 - Check which driver is in use in `runtime.log`: `Using GPU:` / `Driver version:`. The `BotW` logcat tag also has
   `gpu driver:` lines. If a custom driver cannot be opened the app falls back to the system driver (and logs it);
   if the game dies right after a driver change, the launcher offers **Use system driver**.
@@ -47,7 +48,10 @@ Mesa/Turnip builds on Adreno GPUs). Tap **Import driver (.zip)** in the *GPU dri
   a driver does not look right for the device or needs a newer Android (`minApi`).
 - **Samsung Xclipse:** [JimVulkan/radv-xclipse](https://github.com/JimVulkan/radv-xclipse) releases. Import the plain
   `radv-xclipse-<version>.zip` (`vulkan.radeon.so`), not the `-wayland` one (that one is for Bannerlator's Wayland mode).
-- **Mali (Bifrost only):** [JimVulkan/mali-panvk](https://github.com/JimVulkan/mali-panvk) (`libvulkan_panfrost.so`).
+- **Mali:** [FristOneRR/FristOneRR-Panvk-Driver](https://github.com/FristOneRR/FristOneRR-Panvk-Driver) (Valhall G57/G68/G77/G78 and
+  Bifrost; import the driver zip itself, `libvulkan_panfrost.so`) and [JimVulkan/mali-panvk](https://github.com/JimVulkan/mali-panvk)
+  (Bifrost). Newer CSF GPUs (G610, G710, G715, Immortalis) are not supported by either. FristOneRR's variables: `PANVK_HEAP_MB`,
+  `PANVK_TILER_HEAP_MB`, `PANVK_POLY_HEAP_MB`, `PANVK_STENCIL_LATE`, `PANVK_TRACE`.
 - **Driver environment:** the selected driver has a *KEY=VALUE per line* box, applied to the game process
   (for example `RADV_XCLIPSE_LOG=1`, `PANVK_DEBUG=startup`, `TU_DEBUG=...`). `LD_*` variables are ignored.
 - The Xclipse and PanVK paths use the same loader as Turnip but are untested by the author (no such device):
@@ -81,6 +85,13 @@ builds are unaffected):
 cd engine && git apply ../patches/0001-engine-android-vulkan-surface.patch
 git commit -am "android: Vulkan surface via SDL" && git push origin android-vulkan
 cd .. && git add engine && git commit -m "Update engine"
+```
+
+## Reading a native crash
+A fatal signal prints `host frames (base 0x...)` in `runtime.log` / `diagnostics.txt`. After a build, the linker output with
+symbols is kept as `build/native/libmain.unstripped.so` (the APK has a stripped copy). Turn those frames into functions with:
+```bash
+scripts/symbolize.sh diagnostics.txt     # must be the build that crashed
 ```
 
 ## Roadmap

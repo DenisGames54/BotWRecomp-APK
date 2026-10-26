@@ -56,6 +56,11 @@ object Storage {
     fun setDriverEnv(c: Context, id: String, v: String) { if (id.isNotEmpty()) c.getSharedPreferences(PREFS, 0).edit().putString("gpu_env_$id", v).apply() }
     fun language(c: Context): String? = c.getSharedPreferences(PREFS, 0).getString("lang", null)
     fun setLanguage(c: Context, v: String) = c.getSharedPreferences(PREFS, 0).edit().putString("lang", v).apply()
+    /** driver id the shader cache was built with ("" = system); null = unknown */
+    fun cacheDriver(c: Context): String? = c.getSharedPreferences(PREFS, 0).getString("cache_driver", null)
+    fun setCacheDriver(c: Context, id: String) = c.getSharedPreferences(PREFS, 0).edit().putString("cache_driver", id).apply()
+    /** the runtime keeps everything it compiles (shaders, pipelines) in <user root>/cache; saves are untouched */
+    fun clearShaderCache(): Boolean = File(userRoot, "cache").deleteRecursively()
     fun markLaunched(c: Context, v: Boolean) = c.getSharedPreferences(PREFS, 0).edit().putBoolean("launched", v).apply()
     fun wasLaunched(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("launched", false)
     fun legalAccepted(c: Context) = c.getSharedPreferences(PREFS, 0).getBoolean("legal", false)
